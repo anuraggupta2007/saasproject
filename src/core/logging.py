@@ -5,6 +5,11 @@ import structlog
 
 
 def setup_logging(log_level: str = "INFO", log_format: str = "json") -> None:
+    try:
+        json_processor = structlog.processors.JSONRenderer()
+    except AttributeError:
+        json_processor = structlog.dev.ConsoleRenderer()
+
     structlog.configure(
         processors=[
             structlog.contextvars.merge_contextvars,
@@ -12,7 +17,7 @@ def setup_logging(log_level: str = "INFO", log_format: str = "json") -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.dev.set_exc_info,
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.JSONRenderer() if log_format == "json" else structlog.dev.ConsoleRenderer(),
+            json_processor if log_format == "json" else structlog.dev.ConsoleRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(structlog.stdlib, log_level.upper(), structlog.stdlib.INFO)
