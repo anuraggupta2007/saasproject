@@ -41,8 +41,8 @@ export const authApi = {
     apiClient.post('/api/v1/auth/resend-verification', { email }),
 
   oauthGoogleUrl: () =>
-    apiClient.get('/api/v1/auth/oauth/google'),
+    apiClient.get('/api/v1/auth/oauth/google/authorize'),
 
   oauthMicrosoftUrl: () =>
-    apiClient.get('/api/v1/auth/oauth/microsoft'),
+    apiClient.get('/api/v1/auth/oauth/microsoft/authorize'),
 }
