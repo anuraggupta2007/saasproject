@@ -9,11 +9,7 @@ def setup_logging(log_level: str = "INFO", log_format: str = "json") -> None:
     handler.setLevel(level)
 
     if log_format == "json":
-        try:
-            import structlog
-            formatter = structlog.processors.JSONRenderer()
-        except Exception:
-            formatter = logging.Formatter("%(message)s")
+        formatter = logging.Formatter("%(message)s")
     else:
         formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 
