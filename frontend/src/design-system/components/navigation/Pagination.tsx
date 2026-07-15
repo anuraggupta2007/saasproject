@@ -159,7 +159,7 @@ const Pagination: React.FC<PaginationProps> = ({
     'inline-flex items-center justify-center rounded-md',
     'text-sm font-medium',
     'transition-colors duration-200',
-    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand-primary,#6366f1)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-bg-primary,#111827)]',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand-primary,#08619d)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-bg-primary,#111827)]',
     'disabled:pointer-events-none disabled:opacity-50',
   )
 
@@ -221,7 +221,7 @@ const Pagination: React.FC<PaginationProps> = ({
               buttonBase,
               'size-8',
               isActive
-                ? 'bg-[var(--ds-brand-primary,#6366f1)] text-white shadow-sm'
+                ? 'bg-[var(--ds-brand-primary,#08619d)] text-white shadow-sm'
                 : 'text-[var(--ds-text-tertiary,#9ca3af)] hover:bg-[var(--ds-bg-secondary,#1f2937)] hover:text-[var(--ds-text-primary,#e5e7eb)]',
             )}
           >

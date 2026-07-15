@@ -60,13 +60,13 @@ const officeDetails = [
     icon: MapPin,
     title: 'Visit Us',
     lines: ['100 Pine Street, Suite 1250', 'San Francisco, CA 94111', 'United States'],
-    color: '#10b981',
+    color: '#009688',
   },
   {
     icon: Phone,
     title: 'Call Us',
     lines: ['+1 (555) 019-2834', '+1 (555) 019-2835 (Fax)'],
-    color: '#8b5cf6',
+    color: '#009688',
   },
   {
     icon: Clock,
@@ -78,7 +78,7 @@ const officeDetails = [
     icon: Mail,
     title: 'Email Us',
     lines: ['support@mailsavior.com', 'sales@mailsavior.com'],
-    color: '#6366f1',
+    color: '#08619d',
   },
 ]
 

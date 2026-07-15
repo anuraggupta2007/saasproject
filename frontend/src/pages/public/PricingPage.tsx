@@ -35,7 +35,7 @@ const plans = [
     price: { monthly: 9, lifetime: 149 },
     description: 'Perfect for individuals managing personal email accounts.',
     icon: Mail,
-    color: '#6366f1',
+    color: '#08619d',
     features: [
       '3 email accounts',
       '25 GB backup storage',
@@ -55,7 +55,7 @@ const plans = [
     price: { monthly: 29, lifetime: 449 },
     description: 'For freelancers and professionals who need reliable backups.',
     icon: Shield,
-    color: '#8b5cf6',
+    color: '#009688',
     popular: true,
     features: [
       '10 email accounts',
@@ -143,7 +143,7 @@ const licenseTiers = [
     name: 'Personal License',
     price: '$9/mo',
     badge: 'For Individuals',
-    color: '#6366f1',
+    color: '#08619d',
     includes: [
       'Up to 3 email accounts',
       '25 GB cloud storage per account',
@@ -157,7 +157,7 @@ const licenseTiers = [
     name: 'Professional License',
     price: '$29/mo',
     badge: 'Most Popular',
-    color: '#8b5cf6',
+    color: '#009688',
     includes: [
       'Up to 10 email accounts',
       '100 GB cloud storage per account',

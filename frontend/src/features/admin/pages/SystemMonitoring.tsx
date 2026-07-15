@@ -54,7 +54,7 @@ export const SystemMonitoring = memo(() => {
                     <circle cx="40" cy="40" r="35" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="6" />
                     <circle
                       cx="40" cy="40" r="35" fill="none"
-                      stroke={m.value > 80 ? '#ef4444' : m.value > 60 ? '#f59e0b' : '#10b981'}
+                      stroke={m.value > 80 ? '#ef4444' : m.value > 60 ? '#f59e0b' : '#009688'}
                       strokeWidth="6"
                       strokeDasharray={`${(m.value / 100) * 220} 220`}
                       strokeLinecap="round"

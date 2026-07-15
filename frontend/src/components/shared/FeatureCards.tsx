@@ -11,7 +11,7 @@ interface FeatureCardProps {
   index?: number
 }
 
-export function FeatureCard({ icon, title, description, color = '#6366f1', index = 0 }: FeatureCardProps) {
+export function FeatureCard({ icon, title, description, color = '#08619d', index = 0 }: FeatureCardProps) {
   const renderIcon = () => {
     if (typeof icon === 'function' || (typeof icon === 'object' && icon !== null && '$$typeof' in icon)) {
       const Icon = icon as IconComponent

@@ -118,7 +118,7 @@ const Tabs: React.FC<TabsProps> = ({
     >
       {variant === 'underline' && indicatorStyle && (
         <motion.div
-          className="absolute bottom-0 h-0.5 rounded-full bg-[var(--ds-brand-primary,#6366f1)]"
+          className="absolute bottom-0 h-0.5 rounded-full bg-[var(--ds-brand-primary,#08619d)]"
           initial={false}
           animate={{ left: indicatorStyle.left, width: indicatorStyle.width }}
           transition={{ type: 'spring', stiffness: 500, damping: 35 }}
@@ -144,14 +144,14 @@ const Tabs: React.FC<TabsProps> = ({
             onClick={() => !isDisabled && onChange(tab.id)}
             className={cn(
               'inline-flex items-center font-medium transition-colors duration-200',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand-primary,#6366f1)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-bg-primary,#111827)]',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand-primary,#08619d)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-bg-primary,#111827)]',
               'disabled:opacity-50 disabled:cursor-not-allowed',
               sizeStyles[size],
               fullWidth && 'flex-1 justify-center',
               variant === 'underline' && [
                 'border-b-2 -mb-px',
                 isActive
-                  ? 'border-[var(--ds-brand-primary,#6366f1)] text-[var(--ds-text-primary,#e5e7eb)]'
+                  ? 'border-[var(--ds-brand-primary,#08619d)] text-[var(--ds-text-primary,#e5e7eb)]'
                   : 'border-transparent text-[var(--ds-text-tertiary,#9ca3af)] hover:text-[var(--ds-text-secondary,#d1d5db)]',
               ],
               variant === 'pills' && [
@@ -175,7 +175,7 @@ const Tabs: React.FC<TabsProps> = ({
                 className={cn(
                   'ml-1 inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none',
                   isActive
-                    ? 'bg-[var(--ds-brand-primary,#6366f1)] text-white'
+                    ? 'bg-[var(--ds-brand-primary,#08619d)] text-white'
                     : 'bg-white/10 text-[var(--ds-text-tertiary,#9ca3af)]',
                 )}
               >

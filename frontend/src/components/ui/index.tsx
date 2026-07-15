@@ -45,8 +45,8 @@ interface ProgressBarProps {
 }
 
 const progressColors = {
-  brand: 'linear-gradient(90deg, #6366f1, #8b5cf6)',
-  success: 'linear-gradient(90deg, #10b981, #34d399)',
+  brand: 'linear-gradient(90deg, #08619d, #009688)',
+  success: 'linear-gradient(90deg, #009688, #2dd4bf)',
   warning: 'linear-gradient(90deg, #f59e0b, #fbbf24)',
   danger: 'linear-gradient(90deg, #ef4444, #f87171)',
 }
@@ -169,7 +169,7 @@ interface StatCardProps {
   color?: 'brand' | 'success' | 'warning' | 'danger'
 }
 
-const trendColors = { brand: '#818cf8', success: '#34d399', warning: '#fbbf24', danger: '#f87171' }
+const trendColors = { brand: '#0a7bc2', success: '#2dd4bf', warning: '#fbbf24', danger: '#f87171' }
 
 export function StatCard({ title, value, subtitle, icon, trend, color = 'brand' }: StatCardProps) {
   return (
@@ -191,7 +191,7 @@ export function StatCard({ title, value, subtitle, icon, trend, color = 'brand' 
         <div className="mt-3 flex items-center gap-1.5">
           <span
             className="text-xs font-semibold"
-            style={{ color: trend.value >= 0 ? '#34d399' : '#f87171' }}
+            style={{ color: trend.value >= 0 ? '#2dd4bf' : '#f87171' }}
           >
             {trend.value >= 0 ? '↑' : '↓'} {Math.abs(trend.value)}%
           </span>

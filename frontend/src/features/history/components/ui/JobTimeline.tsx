@@ -39,11 +39,11 @@ export const JobTimeline = memo(
                 className="absolute left-[-22px] top-0 w-4 h-4 rounded-full border-2 border-white/10 z-10"
                 style={{
                   backgroundColor:
-                    event.status === 'completed' ? '#10b981' :
+                    event.status === 'completed' ? '#009688' :
                     event.status === 'failed' ? '#ef4444' :
                     event.status === 'started' ? '#3b82f6' : '#6b7280',
                   borderColor:
-                    event.status === 'completed' ? '#10b981' :
+                    event.status === 'completed' ? '#009688' :
                     event.status === 'failed' ? '#ef4444' :
                     event.status === 'started' ? '#3b82f6' : '#6b7280',
                 }}

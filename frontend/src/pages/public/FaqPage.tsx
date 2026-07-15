@@ -36,7 +36,7 @@ const faqCategories: Category[] = [
   {
     category: 'General',
     icon: HelpCircle,
-    color: '#6366f1',
+    color: '#08619d',
     questions: [
       {
         q: 'What is MailSavior?',
@@ -63,7 +63,7 @@ const faqCategories: Category[] = [
   {
     category: 'Security & Privacy',
     icon: Shield,
-    color: '#10b981',
+    color: '#009688',
     questions: [
       {
         q: 'Is my email data safe?',
@@ -117,7 +117,7 @@ const faqCategories: Category[] = [
   {
     category: 'Technical',
     icon: Wrench,
-    color: '#8b5cf6',
+    color: '#009688',
     questions: [
       {
         q: 'What file formats can I convert to?',

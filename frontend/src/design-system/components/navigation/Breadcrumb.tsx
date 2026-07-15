@@ -116,9 +116,9 @@ const Breadcrumb: React.FC<BreadcrumbProps> = ({
                     className={cn(
                       'flex items-center gap-1.5 text-sm font-medium',
                       'text-[var(--ds-text-tertiary,#9ca3af)]',
-                      'hover:text-[var(--ds-brand-primary,#6366f1)]',
+                      'hover:text-[var(--ds-brand-primary,#08619d)]',
                       'transition-colors duration-200',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand-primary,#6366f1)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-bg-primary,#111827)] focus-visible:rounded-md',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand-primary,#08619d)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--ds-bg-primary,#111827)] focus-visible:rounded-md',
                     )}
                   >
                     {item.icon && (

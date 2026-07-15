@@ -33,8 +33,8 @@ const Radio = forwardRef<HTMLInputElement, RadioProps>(
               'flex size-5 shrink-0 items-center justify-center rounded-full border-2 transition-all duration-200',
               'bg-white/5',
               'border-[var(--ds-border-default,rgba(255,255,255,0.1))]',
-              'peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-[var(--ds-bg-primary,#111827)] peer-focus-visible:ring-[var(--ds-brand-primary,#6366f1)]',
-              'peer-checked:border-[var(--ds-brand-primary,#6366f1)]',
+              'peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-[var(--ds-bg-primary,#111827)] peer-focus-visible:ring-[var(--ds-brand-primary,#08619d)]',
+              'peer-checked:border-[var(--ds-brand-primary,#08619d)]',
               'peer-disabled:opacity-50 peer-disabled:cursor-not-allowed',
               !disabled && 'cursor-pointer'
             )}

@@ -118,8 +118,8 @@ const featureCategories = [
 
 const supportedFormats = [
   { name: 'PST', desc: 'Outlook Archive', icon: FileArchive, color: '#0078D4' },
-  { name: 'MBOX', desc: 'Unix Mailbox', icon: HardDrive, color: '#10b981' },
-  { name: 'EML', desc: 'Email Message', icon: Mail, color: '#8b5cf6' },
+  { name: 'MBOX', desc: 'Unix Mailbox', icon: HardDrive, color: '#009688' },
+  { name: 'EML', desc: 'Email Message', icon: Mail, color: '#009688' },
   { name: 'MSG', desc: 'Outlook Item', icon: FileText, color: '#f59e0b' },
   { name: 'PDF', desc: 'Portable Document', icon: FileType, color: '#ef4444' },
   { name: 'HTML', desc: 'Web Format', icon: FileCode, color: '#3b82f6' },
@@ -134,13 +134,13 @@ const comparisonPlans = [
   },
   {
     name: 'Starter',
-    color: '#6366f1',
+    color: '#08619d',
     cta: 'Start 14-Day Trial',
     href: '/register?plan=starter',
   },
   {
     name: 'Pro',
-    color: '#8b5cf6',
+    color: '#009688',
     cta: 'Start 14-Day Trial',
     href: '/register?plan=pro',
     popular: true,

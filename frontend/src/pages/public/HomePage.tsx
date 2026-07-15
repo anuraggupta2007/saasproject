@@ -31,23 +31,23 @@ const supportedProviders = [
   { name: 'iCloud', color: '#3a7afe' },
   { name: 'Zoho', color: '#E42527' },
   { name: 'AOL', color: '#FF0B00' },
-  { name: 'IMAP/POP3', color: '#10b981' },
+  { name: 'IMAP/POP3', color: '#009688' },
 ]
 
 const exportFormats = [
   { name: 'PST', desc: 'Outlook Archive', color: '#0078D4' },
-  { name: 'MBOX', desc: 'Unix Mailbox', color: '#10b981' },
-  { name: 'EML', desc: 'Email Message', color: '#8b5cf6' },
+  { name: 'MBOX', desc: 'Unix Mailbox', color: '#009688' },
+  { name: 'EML', desc: 'Email Message', color: '#009688' },
   { name: 'MSG', desc: 'Outlook Item', color: '#f59e0b' },
   { name: 'PDF', desc: 'Portable Document', color: '#ef4444' },
   { name: 'HTML', desc: 'Web Format', color: '#3b82f6' },
 ]
 
 const features = [
-  { icon: Shield, title: 'Military-Grade Encryption', description: 'AES-256 encryption at rest and in transit. Your emails are always safe.', color: '#6366f1' },
-  { icon: Zap, title: 'Lightning Fast Conversion', description: 'Convert thousands of emails in seconds with our distributed processing engine.', color: '#8b5cf6' },
+  { icon: Shield, title: 'Military-Grade Encryption', description: 'AES-256 encryption at rest and in transit. Your emails are always safe.', color: '#08619d' },
+  { icon: Zap, title: 'Lightning Fast Conversion', description: 'Convert thousands of emails in seconds with our distributed processing engine.', color: '#009688' },
   { icon: Cloud, title: 'Cloud & Local Backup', description: 'Backup to cloud storage or your local device. Full control over your data.', color: '#ec4899' },
-  { icon: RefreshCw, title: 'Auto Scheduled Backup', description: 'Set it and forget it. Daily, weekly, or monthly automatic backups.', color: '#10b981' },
+  { icon: RefreshCw, title: 'Auto Scheduled Backup', description: 'Set it and forget it. Daily, weekly, or monthly automatic backups.', color: '#009688' },
   { icon: Globe, title: 'All Major Providers', description: 'Gmail, Outlook, Yahoo, iCloud, Zoho, IMAP – we support them all.', color: '#f59e0b' },
   { icon: Download, title: 'Universal Format Support', description: 'PST, MBOX, EML, MSG, PDF, HTML – convert to any format you need.', color: '#3b82f6' },
 ]

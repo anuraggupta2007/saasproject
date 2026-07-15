@@ -67,19 +67,19 @@ function Slider({
             'h-2 w-full cursor-pointer appearance-none rounded-full',
             'bg-[var(--ds-bg-muted,#374151)]',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--ds-bg-primary,#111827)]',
-            'focus-visible:ring-[var(--ds-brand-primary,#6366f1)]',
+            'focus-visible:ring-[var(--ds-brand-primary,#08619d)]',
             'disabled:opacity-50 disabled:cursor-not-allowed',
             '[&::-webkit-slider-thumb]:appearance-none',
             '[&::-webkit-slider-thumb]:size-4',
             '[&::-webkit-slider-thumb]:rounded-full',
-            '[&::-webkit-slider-thumb]:bg-[var(--ds-brand-primary,#6366f1)]',
+            '[&::-webkit-slider-thumb]:bg-[var(--ds-brand-primary,#08619d)]',
             '[&::-webkit-slider-thumb]:shadow-md',
             '[&::-webkit-slider-thumb]:transition-transform',
             '[&::-webkit-slider-thumb]:duration-150',
             '[&::-webkit-slider-thumb]:hover:scale-110',
             '[&::-moz-range-thumb]:size-4',
             '[&::-moz-range-thumb]:rounded-full',
-            '[&::-moz-range-thumb]:bg-[var(--ds-brand-primary,#6366f1)]',
+            '[&::-moz-range-thumb]:bg-[var(--ds-brand-primary,#08619d)]',
             '[&::-moz-range-thumb]:border-0',
             '[&::-moz-range-thumb]:shadow-md',
             '[&::-moz-range-thumb]:transition-transform',
@@ -91,7 +91,7 @@ function Slider({
           aria-valuenow={value}
           aria-label={label}
           style={{
-            background: `linear-gradient(to right, var(--ds-brand-primary, #6366f1) 0%, var(--ds-brand-primary, #6366f1) ${percentage}%, var(--ds-bg-muted, #374151) ${percentage}%, var(--ds-bg-muted, #374151) 100%)`,
+            background: `linear-gradient(to right, var(--ds-brand-primary, #08619d) 0%, var(--ds-brand-primary, #08619d) ${percentage}%, var(--ds-bg-muted, #374151) ${percentage}%, var(--ds-bg-muted, #374151) 100%)`,
           }}
         />
       </div>

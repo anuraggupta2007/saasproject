@@ -322,10 +322,10 @@ function Timeline({ events }: { events: TimelineEvent[] }) {
           className="relative pb-6 last:pb-0"
         >
           <div className="absolute left-[-22px] top-0 w-4 h-4 rounded-full border-2 border-white/10 bg-surface-900 z-10" style={{
-            backgroundColor: event.status === 'completed' ? '#10b981' :
+            backgroundColor: event.status === 'completed' ? '#009688' :
               event.status === 'failed' ? '#ef4444' :
                 event.status === 'started' ? '#3b82f6' : '#6b7280',
-            borderColor: event.status === 'completed' ? '#10b981' :
+            borderColor: event.status === 'completed' ? '#009688' :
               event.status === 'failed' ? '#ef4444' :
                 event.status === 'started' ? '#3b82f6' : '#6b7280',
           }} />

@@ -42,11 +42,11 @@ function Switch({
           'border-2 border-transparent',
           config.track,
           checked
-            ? 'bg-[var(--ds-brand-primary,#6366f1)]'
+            ? 'bg-[var(--ds-brand-primary,#08619d)]'
             : 'bg-[var(--ds-bg-muted,#374151)]',
           disabled && 'opacity-50 cursor-not-allowed',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--ds-bg-primary,#111827)]',
-          'focus-visible:ring-[var(--ds-brand-primary,#6366f1)]'
+          'focus-visible:ring-[var(--ds-brand-primary,#08619d)]'
         )}
       >
         <span

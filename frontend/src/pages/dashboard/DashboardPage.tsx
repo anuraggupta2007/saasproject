@@ -16,9 +16,9 @@ const fadeUp = {
 }
 
 const quickActions = [
-  { label: 'New Backup', href: '/dashboard/backup', icon: FolderArchive, color: '#6366f1' },
-  { label: 'Convert File', href: '/dashboard/convert', icon: RefreshCw, color: '#8b5cf6' },
-  { label: 'Upload File', href: '/dashboard/upload', icon: Plus, color: '#10b981' },
+  { label: 'New Backup', href: '/dashboard/backup', icon: FolderArchive, color: '#08619d' },
+  { label: 'Convert File', href: '/dashboard/convert', icon: RefreshCw, color: '#009688' },
+  { label: 'Upload File', href: '/dashboard/upload', icon: Plus, color: '#009688' },
   { label: 'View Downloads', href: '/dashboard/downloads', icon: HardDrive, color: '#f59e0b' },
 ]
 

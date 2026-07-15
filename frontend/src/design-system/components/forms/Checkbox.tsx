@@ -57,8 +57,8 @@ const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
               'peer-focus-visible:ring-2 peer-focus-visible:ring-offset-1 peer-focus-visible:ring-offset-[var(--ds-bg-primary,#111827)]',
               error
                 ? 'peer-focus-visible:ring-[var(--ds-border-error,#ef4444)]'
-                : 'peer-focus-visible:ring-[var(--ds-brand-primary,#6366f1)]',
-              'peer-checked:border-[var(--ds-brand-primary,#6366f1)] peer-checked:bg-[var(--ds-brand-primary,#6366f1)]',
+                : 'peer-focus-visible:ring-[var(--ds-brand-primary,#08619d)]',
+              'peer-checked:border-[var(--ds-brand-primary,#08619d)] peer-checked:bg-[var(--ds-brand-primary,#08619d)]',
               'peer-disabled:opacity-50 peer-disabled:cursor-not-allowed',
               !disabled && 'cursor-pointer'
             )}

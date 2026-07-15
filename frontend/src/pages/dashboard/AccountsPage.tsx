@@ -19,7 +19,7 @@ const PROVIDERS = [
   { id: 'icloud', name: 'iCloud Mail', color: '#3a7afe', icon: '☁️', oauth: false },
   { id: 'zoho', name: 'Zoho Mail', color: '#E42527', icon: '🔴', oauth: false },
   { id: 'aol', name: 'AOL Mail', color: '#FF0B00', icon: '🅰️', oauth: false },
-  { id: 'imap', name: 'Custom IMAP', color: '#10b981', icon: '🖥️', oauth: false },
+  { id: 'imap', name: 'Custom IMAP', color: '#009688', icon: '🖥️', oauth: false },
 ]
 
 interface Account {

@@ -53,7 +53,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
               'focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-offset-[var(--ds-bg-primary,#111827)]',
               error
                 ? 'border-[var(--ds-border-error,#ef4444)] focus:ring-[var(--ds-border-error,#ef4444)] focus:border-[var(--ds-border-error,#ef4444)]'
-                : 'border-[var(--ds-border-default,rgba(255,255,255,0.1))] focus:ring-[var(--ds-brand-primary,#6366f1)] focus:border-[var(--ds-brand-primary,#6366f1)]',
+                : 'border-[var(--ds-border-default,rgba(255,255,255,0.1))] focus:ring-[var(--ds-brand-primary,#08619d)] focus:border-[var(--ds-brand-primary,#08619d)]',
               disabled && 'opacity-50 cursor-not-allowed',
               className
             )}

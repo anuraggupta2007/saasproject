@@ -107,7 +107,7 @@ export const AdminDashboard = memo(() => {
                       <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="4" />
                       <circle
                         cx="32" cy="32" r="28" fill="none"
-                        stroke={m.value > 80 ? '#ef4444' : m.value > 60 ? '#f59e0b' : '#10b981'}
+                        stroke={m.value > 80 ? '#ef4444' : m.value > 60 ? '#f59e0b' : '#009688'}
                         strokeWidth="4"
                         strokeDasharray={`${(m.value / 100) * 176} 176`}
                         strokeLinecap="round"

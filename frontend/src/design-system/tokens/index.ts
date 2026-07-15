@@ -24,9 +24,9 @@ export const shadows = {
   lg: '0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)',
   xl: '0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)',
   '2xl': '0 25px 50px -12px rgb(0 0 0 / 0.25)',
-  glow: '0 0 40px rgba(99, 102, 241, 0.3)',
-  'glow-sm': '0 0 20px rgba(99, 102, 241, 0.2)',
-  'glow-green': '0 0 30px rgba(16, 185, 129, 0.25)',
+  glow: '0 0 40px rgba(8, 97, 157, 0.3)',
+  'glow-sm': '0 0 20px rgba(8, 97, 157, 0.2)',
+  'glow-green': '0 0 30px rgba(0, 150, 136, 0.25)',
 } as const
 
 // Z-index scale

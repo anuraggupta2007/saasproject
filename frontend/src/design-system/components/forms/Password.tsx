@@ -52,7 +52,7 @@ const Password = forwardRef<HTMLInputElement, PasswordProps>(
         className={cn(
           'pointer-events-auto absolute right-3 top-1/2 -translate-y-1/2 p-0.5',
           'text-[var(--ds-text-tertiary,#9ca3af)] hover:text-[var(--ds-text-primary,#e5e7eb)]',
-          'transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand-primary,#6366f1)] rounded'
+          'transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ds-brand-primary,#08619d)] rounded'
         )}
         aria-label={visible ? 'Hide password' : 'Show password'}
         tabIndex={-1}
