@@ -288,6 +288,40 @@ async def oauth_authorize(
     return OAuthAuthorizeResponse(url=url, state=state)
 
 
+@router.get("/oauth/{provider}/callback")
+async def oauth_callback_get(
+    request: Request,
+    response: Response,
+    provider: str,
+    code: str,
+    state: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    from fastapi.responses import RedirectResponse
+    from src.core.exceptions import BadRequestException
+
+    frontend_url = settings.FRONTEND_URL or "http://localhost:3000"
+
+    if provider not in ("google", "microsoft"):
+        return RedirectResponse(url=f"{frontend_url}/login?error=unsupported_provider")
+
+    try:
+        service = AuthService(db)
+        result = await service.oauth_login(
+            provider,
+            code,
+            user_agent=request.headers.get("user-agent"),
+            ip_address=request.client.host if request.client else None,
+        )
+        await db.commit()
+
+        redirect_response = RedirectResponse(url=f"{frontend_url}/dashboard")
+        set_auth_cookies(redirect_response, result["access_token"], result["refresh_token"], result["expires_in"])
+        return redirect_response
+    except Exception as e:
+        return RedirectResponse(url=f"{frontend_url}/login?error=oauth_failed")
+
+
 @router.post("/oauth/{provider}/callback", response_model=TokenResponse)
 async def oauth_callback(
     request: Request,
