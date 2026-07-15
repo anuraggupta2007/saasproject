@@ -34,7 +34,7 @@
 
   /* Fonts */
   --font-sans: 'Inter', 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-display: 'Plus Jakarta Sans', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Playfair Display', 'Cormorant Garamond', 'Georgia', serif;
 
   /* Radius */
   --radius-sm: 0.375rem;
