@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     REFRESH_TOKEN_EXPIRE_REMEMBER_ME_DAYS: int = 30
     MAX_SESSIONS_PER_USER: int = 10
-    CORS_ORIGINS: list[str] = ["http://localhost:3000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "https://mailsavior-pi.vercel.app"]
 
     COOKIE_SECURE: bool = False
     COOKIE_HTTPONLY: bool = True
