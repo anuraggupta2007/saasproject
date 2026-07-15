@@ -65,7 +65,7 @@ jobs:
 
       - name: Notify success
         if: success()
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@v3
         with:
           payload: |
             {
@@ -86,7 +86,7 @@ jobs:
 
       - name: Notify failure
         if: failure()
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@v3
         with:
           payload: |
             {

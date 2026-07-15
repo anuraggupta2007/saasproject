@@ -180,7 +180,7 @@ jobs:
 
       - name: Notify on critical findings
         if: needs.secrets.result == 'failure'
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@v3
         with:
           payload: |
             {

@@ -100,7 +100,7 @@ jobs:
             --timeout=300s
 
       - name: Notify
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@v3
         with:
           payload: |
             {
