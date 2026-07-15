@@ -192,16 +192,29 @@ export function Navbar() {
         </div>
       </div>
 
+      {/* Mobile Menu Overlay */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-40 lg:hidden"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Mobile Menu */}
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="lg:hidden glass border-t border-white/5"
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            className="lg:hidden absolute top-full left-0 right-0 z-50 bg-surface-900/95 backdrop-blur-xl border-b border-white/5 shadow-2xl shadow-black/40"
           >
-            <div className="px-4 py-4 space-y-1">
+            <div className="px-4 py-4 space-y-1 max-h-[70vh] overflow-y-auto">
               {navLinks.map((link) =>
                 link.children ? (
                   <div key={link.label}>
@@ -210,7 +223,7 @@ export function Navbar() {
                       <Link
                         key={child.href}
                         to={child.href}
-                        className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/5"
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/5"
                         onClick={() => setMobileOpen(false)}
                       >
                         <child.icon className="w-4 h-4 text-brand-400" /> {child.label}
@@ -221,7 +234,7 @@ export function Navbar() {
                   <Link
                     key={link.label}
                     to={link.href!}
-                    className="block px-3 py-2 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/5"
+                    className="block px-3 py-2.5 rounded-lg text-sm text-slate-300 hover:text-white hover:bg-white/5"
                     onClick={() => setMobileOpen(false)}
                   >
                     {link.label}
