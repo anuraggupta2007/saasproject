@@ -1,32 +1,30 @@
+import logging
 import sys
-from pathlib import Path
-
-import structlog
 
 
 def setup_logging(log_level: str = "INFO", log_format: str = "json") -> None:
-    try:
-        json_processor = structlog.processors.JSONRenderer()
-    except AttributeError:
-        json_processor = structlog.dev.ConsoleRenderer()
+    level = getattr(logging, log_level.upper(), logging.INFO)
 
-    level = getattr(structlog._log_levels, log_level.upper(), structlog._log_levels.INFO)
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setLevel(level)
 
-    structlog.configure(
-        processors=[
-            structlog.contextvars.merge_contextvars,
-            structlog.processors.add_log_level,
-            structlog.processors.StackInfoRenderer(),
-            structlog.dev.set_exc_info,
-            structlog.processors.TimeStamper(fmt="iso"),
-            json_processor if log_format == "json" else structlog.dev.ConsoleRenderer(),
-        ],
-        wrapper_class=structlog.make_filtering_bound_logger(level),
-        context_class=dict,
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        cache_logger_on_first_use=True,
+    if log_format == "json":
+        try:
+            import structlog
+            formatter = structlog.processors.JSONRenderer()
+        except Exception:
+            formatter = logging.Formatter("%(message)s")
+    else:
+        formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+    handler.setFormatter(formatter)
+
+    logging.basicConfig(
+        level=level,
+        handlers=[handler],
+        format="%(message)s",
     )
 
 
-def get_logger(name: str | None = None) -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger(name)
+def get_logger(name: str | None = None) -> logging.Logger:
+    return logging.getLogger(name)
