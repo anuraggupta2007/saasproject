@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation } from '@tanstack/react-query'
@@ -18,9 +18,18 @@ export default function LoginPage() {
   const [oauthLoading, setOauthLoading] = useState<'google' | 'microsoft' | null>(null)
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams] = useSearchParams()
   const { setUser, setTokens } = useAuthStore()
 
   const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/dashboard'
+
+  useEffect(() => {
+    const error = searchParams.get('error')
+    if (error) {
+      toast.error(`OAuth failed: ${decodeURIComponent(error)}`)
+      navigate('/login', { replace: true })
+    }
+  }, [searchParams, navigate])
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),

@@ -298,7 +298,7 @@ async def oauth_callback_get(
     db: AsyncSession = Depends(get_db),
 ):
     from fastapi.responses import RedirectResponse
-    from src.core.exceptions import BadRequestException
+    import traceback
 
     frontend_url = settings.FRONTEND_URL or "http://localhost:3000"
 
@@ -319,7 +319,10 @@ async def oauth_callback_get(
         set_auth_cookies(redirect_response, result["access_token"], result["refresh_token"], result["expires_in"])
         return redirect_response
     except Exception as e:
-        return RedirectResponse(url=f"{frontend_url}/login?error=oauth_failed")
+        import structlog
+        logger = structlog.get_logger("oauth_callback")
+        logger.error("oauth_callback_failed", error=str(e), provider=provider, traceback=traceback.format_exc())
+        return RedirectResponse(url=f"{frontend_url}/login?error={str(e)[:200]}")
 
 
 @router.post("/oauth/{provider}/callback", response_model=TokenResponse)
