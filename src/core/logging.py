@@ -12,7 +12,7 @@ def setup_logging(log_level: str = "INFO", log_format: str = "json") -> None:
             structlog.processors.StackInfoRenderer(),
             structlog.dev.set_exc_info,
             structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.JSONFormatter() if log_format == "json" else structlog.dev.ConsoleRenderer(),
+            structlog.processors.JSONRenderer() if log_format == "json" else structlog.dev.ConsoleRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
             getattr(structlog.stdlib, log_level.upper(), structlog.stdlib.INFO)
