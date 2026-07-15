@@ -9,6 +9,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '@
 import { SkeletonLoader } from '../components/ui/SkeletonLoader';
 import { useAppearanceSettings, useUpdateAppearance } from '../hooks';
 import { useSettingsStore } from '../store';
+import { useUIStore } from '@/store/uiStore';
 import { toast } from 'react-hot-toast';
 import { cn } from '@/utils/cn';
 import type { AppearanceSettings, AccentColor, LayoutDensity, FontSize } from '../types';
@@ -26,7 +27,8 @@ export const Appearance = memo(() => {
   const navigate = useNavigate();
   const { data: settings, isLoading } = useAppearanceSettings();
   const updateAppearance = useUpdateAppearance();
-  const { setTheme, setAccentColor, setDensity, setFontSize } = useSettingsStore();
+  const { setAccentColor, setDensity, setFontSize } = useSettingsStore();
+  const { setTheme: applyUITheme } = useUIStore();
 
   const [localSettings, setLocalSettings] = useState<AppearanceSettings | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
@@ -39,11 +41,11 @@ export const Appearance = memo(() => {
     setLocalSettings(updated);
     setHasChanges(true);
 
-    if (partial.theme) setTheme(partial.theme);
+    if (partial.theme) applyUITheme(partial.theme);
     if (partial.accentColor) setAccentColor(partial.accentColor);
     if (partial.density) setDensity(partial.density);
     if (partial.fontSize) setFontSize(partial.fontSize);
-  }, [current, setTheme, setAccentColor, setDensity, setFontSize]);
+  }, [current, applyUITheme, setAccentColor, setDensity, setFontSize]);
 
   const handleSave = async () => {
     if (!current) return;
