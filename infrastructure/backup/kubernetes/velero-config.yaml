@@ -1,0 +1,202 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velero-config
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+    app.kubernetes.io/part-of: email-converter-dr
+data:
+  velero-values.yaml: |
+    configuration:
+      backupStorageLocation:
+        - name: default
+          provider: aws
+          bucket: email-converter-velero-backups
+          config:
+            region: us-east-1
+            s3ForcePathStyle: "false"
+            s3Url: ""
+      volumeSnapshotLocation:
+        - name: default
+          provider: aws
+          config:
+            region: us-east-1
+      features: EnableCSI
+      logLevel: info
+      logFormat: json
+    initContainers:
+      - name: velero-plugin-for-aws
+        image: velero/velero-plugin-for-aws:v1.8.0
+        volumeMounts:
+          - mountPath: /target
+            name: plugins
+    credentials:
+      useSecret: true
+      name: velero-credentials
+      secretContents:
+        cloud: |
+          [default]
+          aws_access_key_id=REPLACE_WITH_AWS_ACCESS_KEY
+          aws_secret_access_key=REPLACE_WITH_AWS_SECRET_KEY
+    schedules:
+      full-backup:
+        disabled: false
+        schedule: "0 1 * * *"
+        useOwnerReferencesInBackup: false
+        template:
+          storageLocation: default
+          ttl: "720h"
+          includedNamespaces:
+            - email-converter
+          includedResources:
+            - '*'
+          snapshotVolumes: true
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: email-converter
+      secrets-backup:
+        disabled: false
+        schedule: "0 */6 * * *"
+        template:
+          storageLocation: default
+          ttl: "168h"
+          includedNamespaces:
+            - email-converter
+          includedResources:
+            - secrets
+            - configmaps
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: email-converter
+      pv-backup:
+        disabled: false
+        schedule: "0 4 * * 0"
+        template:
+          storageLocation: default
+          ttl: "720h"
+          includedNamespaces:
+            - email-converter
+          includedResources:
+            - persistentvolumeclaims
+            - persistentvolumes
+          snapshotVolumes: true
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: email-converter
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: velero-credentials
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero
+type: Opaque
+stringData:
+  cloud: |
+    [default]
+    aws_access_key_id=REPLACE_WITH_AWS_ACCESS_KEY
+    aws_secret_access_key=REPLACE_WITH_AWS_SECRET_KEY
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: velero-restore-config
+  namespace: velero
+  labels:
+    app.kubernetes.io/name: velero-restore
+data:
+  restore-full.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    BACKUP_NAME="${1:-}"
+    NAMESPACE="${2:-email-converter}"
+
+    if [ -z "$BACKUP_NAME" ]; then
+      echo "Usage: $0 <backup-name> [namespace]"
+      echo ""
+      echo "Available backups:"
+      velero backup get -o json | python3 -c "
+    import sys, json
+    data = json.load(sys.stdin)
+    for item in data.get('items', []):
+        name = item['metadata']['name']
+        phase = item['status']['phase']
+        created = item['metadata']['creationTimestamp']
+        print(f'  {name} (phase={phase}, created={created})')
+    "
+      exit 1
+    fi
+
+    echo "Restoring from backup: $BACKUP_NAME"
+    echo "Target namespace: $NAMESPACE"
+
+    velero restore create \
+      --from-backup "$BACKUP_NAME" \
+      --namespace-mappings "${NAMESPACE}:${NAMESPACE}" \
+      --wait
+
+    echo "Restore complete. Verifying..."
+
+    kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running -o wide || true
+
+    echo "Restore verification complete"
+  restore-secrets.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    BACKUP_NAME="${1:-}"
+
+    if [ -z "$BACKUP_NAME" ]; then
+      echo "Usage: $0 <backup-name>"
+      exit 1
+    fi
+
+    echo "Restoring secrets from backup: $BACKUP_NAME"
+
+    velero restore create \
+      --from-backup "$BACKUP_NAME" \
+      --include-resources secrets,configmaps \
+      --namespace-mappings "email-converter:email-converter" \
+      --wait
+
+    echo "Secrets restore complete"
+  list-backups.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    echo "=== Velero Backups ==="
+    velero backup get -o json | python3 -c "
+    import sys, json
+    data = json.load(sys.stdin)
+    print(f'{"Name":<40} {"Phase":<12} {"Created":<25} {"Size":<10}')
+    print('-' * 90)
+    for item in sorted(data.get('items', []), key=lambda x: x['metadata']['creationTimestamp'], reverse=True):
+        name = item['metadata']['name']
+        phase = item['status'].get('phase', 'Unknown')
+        created = item['metadata']['creationTimestamp'][:19]
+        size = item['status'].get('progress', {}).get('totalBytes', 'N/A')
+        print(f'{name:<40} {phase:<12} {created:<25} {size:<10}')
+    "
+    echo ""
+    echo "=== Velero Restores ==="
+    velero restore get -o json | python3 -c "
+    import sys, json
+    data = json.load(sys.stdin)
+    for item in sorted(data.get('items', []), key=lambda x: x['metadata']['creationTimestamp'], reverse=True)[:5]:
+        name = item['metadata']['name']
+        phase = item['status'].get('phase', 'Unknown')
+        created = item['metadata']['creationTimestamp'][:19]
+        print(f'  {name} (phase={phase}, created={created})')
+    "

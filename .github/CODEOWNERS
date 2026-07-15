@@ -1,0 +1,38 @@
+# =============================================================================
+# CODEOWNERS
+# =============================================================================
+# Defines code ownership for pull request reviews
+# =============================================================================
+
+# Default owners for everything
+* @email-converter/platform-team
+
+# Docker & Infrastructure
+docker/ @email-converter/platform-team
+k8s/ @email-converter/platform-team
+.github/ @email-converter/platform-team
+
+# Application Code
+src/ @email-converter/backend-team
+tests/ @email-converter/backend-team
+
+# CI/CD Pipelines
+.github/workflows/ @email-converter/platform-team
+.github/actions/ @email-converter/platform-team
+
+# Documentation
+docs/ @email-converter/platform-team
+*.md @email-converter/platform-team
+
+# Configuration
+pyproject.toml @email-converter/platform-team
+requirements.txt @email-converter/platform-team
+alembic.ini @email-converter/backend-team
+
+# Module-specific ownership
+src/modules/auth/ @email-converter/auth-team
+src/modules/payment/ @email-converter/billing-team
+src/modules/admin/ @email-converter/platform-team
+src/modules/conversion/ @email-converter/core-team
+src/modules/notification/ @email-converter/platform-team
+src/modules/security/ @email-converter/security-team

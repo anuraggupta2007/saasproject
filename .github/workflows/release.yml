@@ -1,0 +1,149 @@
+# =============================================================================
+# Release Pipeline
+# =============================================================================
+# Creates releases with semantic versioning, changelog, and GitHub Release
+# Triggers on version tags (v*)
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
+jobs:
+  # ===========================================================================
+  # Create Release
+  # ===========================================================================
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      changelog: ${{ steps.changelog.outputs.changelog }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "version=${TAG}" >> $GITHUB_OUTPUT
+          echo "Version: ${TAG}"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          # Get previous tag
+          PREV_TAG=$(git tag --sort=-v:refname | head -2 | tail -1)
+          echo "Previous tag: ${PREV_TAG}"
+
+          # Generate changelog
+          CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"- %s (%h)" --no-merges)
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "${CHANGELOG}" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        run: |
+          cat > release_notes.md << EOF
+          # Release ${{ steps.version.outputs.version }}
+
+          ## Changes
+
+          ${{ steps.changelog.outputs.changelog }}
+
+          ## Docker Images
+
+          | Service | Image |
+          |---------|-------|
+          | API | \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/api:${{ steps.version.outputs.version }}\` |
+          | Celery Worker | \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/celery-worker:${{ steps.version.outputs.version }}\` |
+          | Celery Beat | \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/celery-beat:${{ steps.version.outputs.version }}\` |
+          | Flower | \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/flower:${{ steps.version.outputs.version }}\` |
+
+          ## Deployment
+
+          \`\`\`bash
+          helm upgrade --install email-converter ./k8s/helm/email-converter \\
+            -f ./k8s/helm/email-converter/values-prod.yaml \\
+            --set api.image.tag=${{ steps.version.outputs.version }} \\
+            --set celeryWorker.image.tag=${{ steps.version.outputs.version }} \\
+            --set celeryBeat.image.tag=${{ steps.version.outputs.version }} \\
+            --set flower.image.tag=${{ steps.version.outputs.version }} \\
+            -n email-converter-prod
+          \`\`\`
+
+          ## Rollback
+
+          \`\`\`bash
+          helm rollback email-converter 0 -n email-converter-prod
+          \`\`\`
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "Release ${{ steps.version.outputs.version }}"
+          body_path: release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          files: |
+            release_notes.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update Helm chart version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          sed -i "s/^version:.*/version: ${VERSION}/" k8s/helm/email-converter/Chart.yaml
+          sed -i "s/^appVersion:.*/appVersion: \"${VERSION}\"/" k8s/helm/email-converter/Chart.yaml
+
+      - name: Commit version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add k8s/helm/email-converter/Chart.yaml
+          git commit -m "chore: bump chart version to ${{ steps.version.outputs.version }}" || true
+          git push || true
+
+  # ===========================================================================
+  # Notify Release
+  # ===========================================================================
+  notify:
+    name: Notify
+    runs-on: ubuntu-latest
+    needs: [release]
+    steps:
+      - name: Notify Slack
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "🎉 Release ${{ needs.release.outputs.version }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🎉 *New Release: ${{ needs.release.outputs.version }}*\n*Repo:* ${{ github.repository }}\n*Tag:* ${{ github.ref_name }}\n*Link:* <${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}|View Release>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

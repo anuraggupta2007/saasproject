@@ -1,0 +1,211 @@
+# =============================================================================
+# Deploy to Production
+# =============================================================================
+# Manual trigger with approval gate
+# Uses production values with full resources
+# Supports rollback via previous image tag
+# =============================================================================
+
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: "Docker image tag to deploy"
+        required: true
+        type: string
+      strategy:
+        description: "Deployment strategy"
+        required: true
+        type: choice
+        options:
+          - rolling
+          - blue-green
+          - canary
+        default: rolling
+      canary-percentage:
+        description: "Canary percentage (for canary strategy)"
+        required: false
+        type: string
+        default: "10"
+      rollback:
+        description: "Rollback to previous version"
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  # ===========================================================================
+  # Pre-deployment Checks
+  # ===========================================================================
+  pre-check:
+    name: Pre-deployment Checks
+    runs-on: ubuntu-latest
+    environment:
+      name: production-approval
+      url: https://api.emailconverter.com
+    outputs:
+      previous-tag: ${{ steps.previous.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Get previous version
+        id: previous
+        run: |
+          PREVIOUS=$(helm history email-converter \
+            -n email-converter-prod \
+            --max 1 \
+            -o json | jq -r '.[0].chart' 2>/dev/null || echo "unknown")
+          echo "tag=${PREVIOUS}" >> $GITHUB_OUTPUT
+          echo "Previous version: ${PREVIOUS}"
+
+      - name: Verify image exists
+        run: |
+          # Check if the image tag exists in the registry
+          if ! crane manifest ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/api:${{ inputs.image-tag }} > /dev/null 2>&1; then
+            echo "ERROR: Image tag ${{ inputs.image-tag }} not found in registry"
+            exit 1
+          fi
+          echo "Image verified: ${{ inputs.image-tag }}"
+
+  # ===========================================================================
+  # Deploy to Production
+  # ===========================================================================
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [pre-check]
+    environment:
+      name: production
+      url: https://api.emailconverter.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy with selected strategy
+        uses: ./.github/actions/helm-deploy
+        with:
+          environment: prod
+          namespace: email-converter-prod
+          image-tag: ${{ inputs.image-tag }}
+          registry: ${{ env.REGISTRY }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
+          timeout: "15m"
+
+      - name: Verify production health
+        run: |
+          echo "Verifying production health..."
+          sleep 30
+
+          for i in $(seq 1 20); do
+            if curl -sf https://api.emailconverter.com/health > /dev/null 2>&1; then
+              echo "Production health check passed"
+              exit 0
+            fi
+            echo "Attempt $i/20..."
+            sleep 15
+          done
+          echo "Production health check failed"
+          exit 1
+
+      - name: Notify success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "🚀 Production deploy succeeded",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🚀 *Production Deploy Succeeded*\n*Repo:* ${{ github.repository }}\n*Image:* `${{ inputs.image-tag }}`\n*Strategy:* ${{ inputs.strategy }}\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+      - name: Notify failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "❌ Production deploy FAILED",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "🚨 *Production Deploy FAILED*\n*Repo:* ${{ github.repository }}\n*Image:* `${{ inputs.image-tag }}`\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>\n\n_Immediate attention required_"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+  # ===========================================================================
+  # Rollback Job (manual trigger)
+  # ===========================================================================
+  rollback:
+    name: Rollback
+    runs-on: ubuntu-latest
+    needs: [deploy]
+    if: failure()
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rollback deployment
+        run: |
+          echo "Rolling back to previous version..."
+          helm rollback email-converter 0 \
+            -n email-converter-prod \
+            --wait \
+            --timeout 10m
+
+          echo "Verifying rollback..."
+          kubectl get pods -n email-converter-prod
+
+      - name: Notify rollback
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "⚠️ Production ROLLBACK executed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "⚠️ *Production ROLLBACK Executed*\n*Repo:* ${{ github.repository }}\n*Rolled back from:* `${{ inputs.image-tag }}`\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

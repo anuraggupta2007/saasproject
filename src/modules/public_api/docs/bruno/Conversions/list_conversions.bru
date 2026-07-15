@@ -1,0 +1,18 @@
+meta {
+  name: List Conversions
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{base_url}}/api/public/v1/conversions?page=1&page_size=20
+  auth: none
+}
+
+script {
+  req.header("Authorization", "Bearer {{api_key}}")
+}
+
+assert {
+  res.status: eq 200
+}

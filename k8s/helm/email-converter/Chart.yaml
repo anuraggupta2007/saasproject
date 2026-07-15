@@ -1,0 +1,31 @@
+apiVersion: v2
+name: email-converter
+description: Production-grade Kubernetes Helm chart for Email Conversion SaaS
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+maintainers:
+  - name: Platform Team
+    email: platform@emailconverter.com
+keywords:
+  - email
+  - converter
+  - saas
+  - fastapi
+home: https://emailconverter.com
+icon: https://emailconverter.com/icon.png
+sources:
+  - https://github.com/email-converter/saas
+dependencies:
+  - name: postgresql
+    version: "16.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: postgresql.enabled
+  - name: redis
+    version: "20.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
+  - name: minio
+    version: "14.x.x"
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: minio.enabled

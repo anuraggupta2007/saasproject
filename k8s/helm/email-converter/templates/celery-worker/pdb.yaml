@@ -1,0 +1,16 @@
+{{- if .Values.celeryWorker.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "email-converter.fullname" . }}-celery-worker
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  minAvailable: {{ .Values.celeryWorker.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "email-converter.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-worker
+{{- end }}

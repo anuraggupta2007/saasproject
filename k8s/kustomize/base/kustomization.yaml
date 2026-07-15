@@ -1,0 +1,45 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: email-converter-base
+
+resources:
+  - ../../helm/email-converter/templates/namespace.yaml
+  - ../../helm/email-converter/templates/configmap.yaml
+  - ../../helm/email-converter/templates/secret.yaml
+  - ../../helm/email-converter/templates/secret-db.yaml
+  - ../../helm/email-converter/templates/rbac/service-account.yaml
+  - ../../helm/email-converter/templates/rbac/role.yaml
+  - ../../helm/email-converter/templates/api/deployment.yaml
+  - ../../helm/email-converter/templates/api/service.yaml
+  - ../../helm/email-converter/templates/api/hpa.yaml
+  - ../../helm/email-converter/templates/api/pdb.yaml
+  - ../../helm/email-converter/templates/celery-worker/deployment.yaml
+  - ../../helm/email-converter/templates/celery-worker/hpa.yaml
+  - ../../helm/email-converter/templates/celery-worker/pdb.yaml
+  - ../../helm/email-converter/templates/celery-beat/deployment.yaml
+  - ../../helm/email-converter/templates/flower/deployment.yaml
+  - ../../helm/email-converter/templates/flower/service.yaml
+  - ../../helm/email-converter/templates/postgresql/statefulset.yaml
+  - ../../helm/email-converter/templates/postgresql/service.yaml
+  - ../../helm/email-converter/templates/redis/statefulset.yaml
+  - ../../helm/email-converter/templates/redis/service.yaml
+  - ../../helm/email-converter/templates/minio/statefulset.yaml
+  - ../../helm/email-converter/templates/minio/service.yaml
+  - ../../helm/email-converter/templates/ingress/ingress.yaml
+  - ../../helm/email-converter/templates/monitoring/prometheus-statefulset.yaml
+  - ../../helm/email-converter/templates/monitoring/prometheus-service.yaml
+  - ../../helm/email-converter/templates/monitoring/grafana-deployment.yaml
+  - ../../helm/email-converter/templates/monitoring/grafana-service.yaml
+  - ../../helm/email-converter/templates/monitoring/loki-statefulset.yaml
+  - ../../helm/email-converter/templates/monitoring/loki-service.yaml
+  - ../../helm/email-converter/templates/monitoring/otel-collector-deployment.yaml
+  - ../../helm/email-converter/templates/monitoring/otel-collector-service.yaml
+  - ../../helm/email-converter/templates/network-policies/policies.yaml
+  - ../../helm/email-converter/templates/certificates/cluster-issuer.yaml
+  - ../../helm/email-converter/templates/cronjobs/backup.yaml
+
+commonLabels:
+  app.kubernetes.io/part-of: email-converter
+  managed-by: kustomize

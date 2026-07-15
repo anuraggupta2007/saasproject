@@ -1,0 +1,218 @@
+{
+  "info": {
+    "name": "Email Converter API",
+    "description": "Public API for the Email Converter SaaS platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "https://api.emailconverter.com" },
+    { "key": "api_key", "value": "ec_live_your_key_here" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/public/v1/health",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get Profile",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/public/v1/users/me",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        },
+        {
+          "name": "Get Usage",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/public/v1/users/me/usage?period=current", "host": ["{{base_url}}"], "path": ["api", "public", "v1", "users", "me", "usage"], "query": [{ "key": "period", "value": "current" }] },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Uploads",
+      "item": [
+        {
+          "name": "Create Upload",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/public/v1/uploads",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"filename\": \"test.mbox\", \"file_size\": 1048576 }"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Conversions",
+      "item": [
+        {
+          "name": "Create Conversion",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/public/v1/conversions",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"upload_id\": \"00000000-0000-0000-0000-000000000000\", \"target_format\": \"pdf\" }"
+            }
+          }
+        },
+        {
+          "name": "List Conversions",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/public/v1/conversions?page=1&page_size=20", "host": ["{{base_url}}"], "path": ["api", "public", "v1", "conversions"], "query": [{ "key": "page", "value": "1" }, { "key": "page_size", "value": "20" }] },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        },
+        {
+          "name": "Get Conversion",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/public/v1/conversions/{{conversion_id}}",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        },
+        {
+          "name": "Cancel Conversion",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/public/v1/conversions/{{conversion_id}}/cancel",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Search",
+      "item": [
+        {
+          "name": "Search Emails",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/public/v1/search",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"query\": \"from:alice@example.com\", \"page\": 1, \"page_size\": 20 }"
+            }
+          }
+        },
+        {
+          "name": "Search Suggestions",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{base_url}}/api/public/v1/search/suggestions?q=report&limit=10", "host": ["{{base_url}}"], "path": ["api", "public", "v1", "search", "suggestions"], "query": [{ "key": "q", "value": "report" }, { "key": "limit", "value": "10" }] },
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Create Webhook",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/public/v1/webhooks",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \"url\": \"https://your-server.com/webhook\", \"events\": [\"conversion.completed\", \"conversion.failed\"] }"
+            }
+          }
+        },
+        {
+          "name": "List Webhooks",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/public/v1/webhooks",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        },
+        {
+          "name": "Test Webhook",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/api/public/v1/webhooks/{{webhook_id}}/test",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rate Limits",
+      "item": [
+        {
+          "name": "Get Rate Limit Status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/public/v1/rate-limit/status",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        },
+        {
+          "name": "List Tiers",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/public/v1/tiers",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{api_key}}" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

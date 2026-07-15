@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "email-converter.fullname" . }}-flower
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: flower
+spec:
+  replicas: {{ .Values.flower.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "email-converter.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: flower
+  template:
+    metadata:
+      labels:
+        {{- include "email-converter.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: flower
+    spec:
+      serviceAccountName: {{ include "email-converter.fullname" . }}-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: flower
+          image: {{ include "email-converter.flowerImage" . }}
+          imagePullPolicy: {{ .Values.flower.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 5555
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "email-converter.fullname" . }}-config
+            - secretRef:
+                name: {{ include "email-converter.fullname" . }}-secrets
+          resources:
+            {{- toYaml .Values.flower.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.flower.livenessProbe.httpGet.path }}
+              port: {{ .Values.flower.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.flower.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.flower.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.flower.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.flower.livenessProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.flower.readinessProbe.httpGet.path }}
+              port: {{ .Values.flower.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.flower.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.flower.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.flower.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.flower.readinessProbe.failureThreshold }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

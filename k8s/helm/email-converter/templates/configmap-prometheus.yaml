@@ -1,0 +1,97 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "email-converter.fullname" . }}-prometheus-config
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+      scrape_timeout: 10s
+      external_labels:
+        project: "email-converter"
+        environment: {{ .Values.global.environment | quote }}
+
+    rule_files:
+      - /etc/prometheus/alerts/*.yml
+
+    scrape_configs:
+      - job_name: "email-converter-api"
+        metrics_path: "/metrics"
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names:
+                - {{ include "email-converter.namespace" . }}
+            relabel_configs:
+              - source_labels: [__meta_kubernetes_service_name]
+                regex: api
+                action: keep
+              - source_labels: [__meta_kubernetes_endpoint_port_name]
+                regex: http
+                action: keep
+
+      - job_name: "email-converter-celery"
+        static_configs:
+          - targets: ["celery-worker.{{ .Release.Namespace }}.svc.cluster.local:8001"]
+            labels:
+              service: "email-converter-celery"
+
+      - job_name: "postgres"
+        static_configs:
+          - targets: ["postgresql-primary.{{ .Release.Namespace }}.svc.cluster.local:9187"]
+            labels:
+              service: "postgresql"
+
+      - job_name: "redis"
+        static_configs:
+          - targets: ["redis-master.{{ .Release.Namespace }}.svc.cluster.local:9121"]
+            labels:
+              service: "redis"
+
+  alerts.yml: |
+    groups:
+      - name: email-converter-alerts
+        rules:
+          - alert: HighErrorRate
+            expr: |
+              rate(email_converter_api_errors_total[5m]) /
+              rate(email_converter_api_requests_total[5m]) * 100 > 5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High API error rate"
+              description: "Error rate is {{`{{ $value }}`}}% (threshold: 5%)"
+
+          - alert: HighResponseTime
+            expr: |
+              histogram_quantile(0.95, rate(email_converter_api_request_duration_seconds_bucket[5m])) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High P95 response time"
+              description: "P95 response time is {{`{{ $value }}`}}s (threshold: 2s)"
+
+          - alert: QueueBacklog
+            expr: email_converter_queue_length > 1000
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Queue backlog detected"
+              description: "Queue length is {{`{{ $value }}`}} (threshold: 1000)"
+
+          - alert: ContainerRestartLoop
+            expr: increase(kube_pod_container_status_restarts_total{namespace="{{ include "email-converter.namespace" . }}"}[1h]) > 5
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Container restart loop detected"
+              description: "Container {{`{{ $labels.pod }}`}} has restarted {{`{{ $value }}`}} times in 1 hour"

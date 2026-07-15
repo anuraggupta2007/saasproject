@@ -1,0 +1,28 @@
+{
+  "version": "1",
+  "name": "Email Converter API",
+  "type": "collection",
+  "environments": [
+    {
+      "name": "Production",
+      "variables": [
+        { "key": "base_url", "value": "https://api.emailconverter.com" },
+        { "key": "api_key", "value": "ec_live_your_key_here" }
+      ]
+    },
+    {
+      "name": "Staging",
+      "variables": [
+        { "key": "base_url", "value": "https://staging-api.emailconverter.com" },
+        { "key": "api_key", "value": "ec_test_your_key_here" }
+      ]
+    },
+    {
+      "name": "Local",
+      "variables": [
+        { "key": "base_url", "value": "http://localhost:8000" },
+        { "key": "api_key", "value": "ec_test_your_key_here" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,380 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Email Converter API",
+    "description": "Public REST API for the Email Converter SaaS platform",
+    "version": "1.0.0",
+    "contact": {
+      "name": "API Support",
+      "email": "api-support@emailconverter.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    { "url": "https://api.emailconverter.com", "description": "Production" },
+    { "url": "https://staging-api.emailconverter.com", "description": "Staging" },
+    { "url": "http://localhost:8000", "description": "Local Development" }
+  ],
+  "security": [
+    { "BearerAuth": [], "ApiKeyAuth": [] }
+  ],
+  "paths": {
+    "/api/public/v1/health": {
+      "get": {
+        "tags": ["Health"],
+        "summary": "Health check",
+        "operationId": "healthCheck",
+        "responses": {
+          "200": {
+            "description": "Service is healthy",
+            "content": { "application/json": { "schema": { "type": "object", "properties": { "status": { "type": "string" }, "version": { "type": "string" }, "timestamp": { "type": "string", "format": "date-time" } } } } }
+          }
+        }
+      }
+    },
+    "/api/public/v1/users/me": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get user profile",
+        "operationId": "getUserProfile",
+        "responses": {
+          "200": { "description": "User profile" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/public/v1/users/me/usage": {
+      "get": {
+        "tags": ["Users"],
+        "summary": "Get usage statistics",
+        "operationId": "getUserUsage",
+        "parameters": [
+          { "name": "period", "in": "query", "schema": { "type": "string", "enum": ["current", "previous", "custom"] } }
+        ],
+        "responses": {
+          "200": { "description": "Usage statistics" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/public/v1/auth/keys": {
+      "post": {
+        "tags": ["Authentication"],
+        "summary": "Create API key",
+        "operationId": "createApiKey",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/APIKeyCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "API key created" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "get": {
+        "tags": ["Authentication"],
+        "summary": "List API keys",
+        "operationId": "listApiKeys",
+        "responses": {
+          "200": { "description": "List of API keys" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/public/v1/uploads": {
+      "post": {
+        "tags": ["Uploads"],
+        "summary": "Create upload session",
+        "operationId": "createUpload",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UploadCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Upload session created" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/public/v1/uploads/{upload_id}": {
+      "get": {
+        "tags": ["Uploads"],
+        "summary": "Get upload status",
+        "operationId": "getUpload",
+        "parameters": [
+          { "name": "upload_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Upload status" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/public/v1/conversions": {
+      "post": {
+        "tags": ["Conversions"],
+        "summary": "Start conversion",
+        "operationId": "createConversion",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ConversionCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Conversion started" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      },
+      "get": {
+        "tags": ["Conversions"],
+        "summary": "List conversions",
+        "operationId": "listConversions",
+        "parameters": [
+          { "name": "page", "in": "query", "schema": { "type": "integer", "default": 1 } },
+          { "name": "page_size", "in": "query", "schema": { "type": "integer", "default": 20 } },
+          { "name": "status", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "List of conversions" },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/public/v1/conversions/{conversion_id}": {
+      "get": {
+        "tags": ["Conversions"],
+        "summary": "Get conversion status",
+        "operationId": "getConversion",
+        "parameters": [
+          { "name": "conversion_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Conversion status" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/public/v1/conversions/{conversion_id}/cancel": {
+      "post": {
+        "tags": ["Conversions"],
+        "summary": "Cancel conversion",
+        "operationId": "cancelConversion",
+        "parameters": [
+          { "name": "conversion_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Conversion cancelled" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/public/v1/conversions/{conversion_id}/download": {
+      "get": {
+        "tags": ["Conversions"],
+        "summary": "Get download URL",
+        "operationId": "downloadConversion",
+        "parameters": [
+          { "name": "conversion_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Download URL" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/public/v1/search": {
+      "post": {
+        "tags": ["Search"],
+        "summary": "Search emails",
+        "operationId": "searchEmails",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/SearchRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Search results" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      }
+    },
+    "/api/public/v1/search/suggestions": {
+      "get": {
+        "tags": ["Search"],
+        "summary": "Get search suggestions",
+        "operationId": "getSearchSuggestions",
+        "parameters": [
+          { "name": "q", "in": "query", "required": true, "schema": { "type": "string" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": {
+          "200": { "description": "Search suggestions" }
+        }
+      }
+    },
+    "/api/public/v1/webhooks": {
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Create webhook",
+        "operationId": "createWebhook",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WebhookCreate" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Webhook created" },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
+      },
+      "get": {
+        "tags": ["Webhooks"],
+        "summary": "List webhooks",
+        "operationId": "listWebhooks",
+        "responses": {
+          "200": { "description": "List of webhooks" }
+        }
+      }
+    },
+    "/api/public/v1/webhooks/{webhook_id}/test": {
+      "post": {
+        "tags": ["Webhooks"],
+        "summary": "Test webhook",
+        "operationId": "testWebhook",
+        "parameters": [
+          { "name": "webhook_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": { "description": "Webhook test sent" }
+        }
+      }
+    },
+    "/api/public/v1/webhooks/{webhook_id}/deliveries": {
+      "get": {
+        "tags": ["Webhooks"],
+        "summary": "List webhook deliveries",
+        "operationId": "listWebhookDeliveries",
+        "parameters": [
+          { "name": "webhook_id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 50 } }
+        ],
+        "responses": {
+          "200": { "description": "List of deliveries" }
+        }
+      }
+    },
+    "/api/public/v1/rate-limit/status": {
+      "get": {
+        "tags": ["Rate Limits"],
+        "summary": "Get rate limit status",
+        "operationId": "getRateLimitStatus",
+        "responses": {
+          "200": { "description": "Rate limit status" }
+        }
+      }
+    },
+    "/api/public/v1/tiers": {
+      "get": {
+        "tags": ["Rate Limits"],
+        "summary": "List available tiers",
+        "operationId": "listTiers",
+        "responses": {
+          "200": { "description": "List of tiers" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "API Key"
+      },
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      }
+    },
+    "schemas": {
+      "APIKeyCreate": {
+        "type": "object",
+        "required": ["name", "scopes"],
+        "properties": {
+          "name": { "type": "string", "maxLength": 100 },
+          "scopes": { "type": "array", "items": { "type": "string" } },
+          "expires_in_days": { "type": "integer" },
+          "metadata": { "type": "object" }
+        }
+      },
+      "UploadCreate": {
+        "type": "object",
+        "required": ["filename", "file_size"],
+        "properties": {
+          "filename": { "type": "string" },
+          "file_size": { "type": "integer" }
+        }
+      },
+      "ConversionCreate": {
+        "type": "object",
+        "required": ["upload_id", "target_format"],
+        "properties": {
+          "upload_id": { "type": "string", "format": "uuid" },
+          "target_format": { "type": "string", "enum": ["pdf", "html", "pst", "eml", "msg"] },
+          "options": { "type": "object" }
+        }
+      },
+      "SearchRequest": {
+        "type": "object",
+        "required": ["query"],
+        "properties": {
+          "query": { "type": "string" },
+          "page": { "type": "integer", "default": 1 },
+          "page_size": { "type": "integer", "default": 20 },
+          "date_from": { "type": "string", "format": "date" },
+          "date_to": { "type": "string", "format": "date" },
+          "sender": { "type": "string" },
+          "has_attachment": { "type": "boolean" }
+        }
+      },
+      "WebhookCreate": {
+        "type": "object",
+        "required": ["url", "events"],
+        "properties": {
+          "url": { "type": "string", "format": "uri" },
+          "events": { "type": "array", "items": { "type": "string" } },
+          "description": { "type": "string" },
+          "secret": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": { "description": "Bad request" },
+      "Unauthorized": { "description": "Authentication required" },
+      "NotFound": { "description": "Resource not found" },
+      "RateLimited": { "description": "Rate limit exceeded" }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+meta {
+  name: Search Emails
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{base_url}}/api/public/v1/search
+  body:json {
+    {
+      "query": "from:alice@example.com",
+      "page": 1,
+      "page_size": 20
+    }
+  }
+  auth: none
+}
+
+script {
+  req.header("Authorization", "Bearer {{api_key}}")
+  req.header("Content-Type", "application/json")
+}
+
+assert {
+  res.status: eq 200
+}

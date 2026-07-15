@@ -1,0 +1,99 @@
+groups:
+  - name: email-converter-alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          rate(email_converter_api_errors_total[5m]) /
+          rate(email_converter_api_requests_total[5m]) * 100 > 5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High API error rate"
+          description: "Error rate is {{ $value | humanize }}% (threshold: 5%)"
+
+      - alert: HighResponseTime
+        expr: |
+          histogram_quantile(0.95, rate(email_converter_api_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P95 response time"
+          description: "P95 response time is {{ $value | humanize }}s (threshold: 2s)"
+
+      - alert: QueueBacklog
+        expr: email_converter_queue_length > 1000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue backlog detected"
+          description: "Queue length is {{ $value }} (threshold: 1000)"
+
+      - alert: WorkerFailure
+        expr: |
+          rate(email_converter_worker_tasks_failed_total[5m]) * 100 > 10
+        for: 5m
+        labels:
+          severity: error
+        annotations:
+          summary: "High worker failure rate"
+          description: "Worker failure rate is {{ $value | humanize }}%"
+
+      - alert: DatabaseConnectionIssues
+        expr: email_converter_db_connections_active > 80
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection pool exhausted"
+          description: "Active DB connections: {{ $value }}"
+
+      - alert: LowDiskSpace
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low disk space"
+          description: "Disk usage is {{ $value | humanize }}%"
+
+      - alert: HighCPU
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage"
+          description: "CPU usage is {{ $value | humanize }}%"
+
+      - alert: HighMemory
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage"
+          description: "Memory usage is {{ $value | humanize }}%"
+
+      - alert: FailedPayments
+        expr: |
+          rate(email_converter_payments_failed_total[1h]) * 100 > 5
+        for: 10m
+        labels:
+          severity: error
+        annotations:
+          summary: "High payment failure rate"
+          description: "Payment failure rate is {{ $value | humanize }}%"
+
+      - alert: FailedConversions
+        expr: |
+          rate(email_converter_conversions_total{status="failure"}[5m]) /
+          rate(email_converter_conversions_total[5m]) * 100 > 15
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High conversion failure rate"
+          description: "Conversion failure rate is {{ $value | humanize }}%"

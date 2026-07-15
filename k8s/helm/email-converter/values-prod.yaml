@@ -1,0 +1,311 @@
+# =============================================================================
+# Helm Values - Production
+# =============================================================================
+# IMPORTANT: Use sealed-secrets or external-secrets for sensitive values
+# This file contains non-sensitive defaults only
+# =============================================================================
+
+global:
+  imageRegistry: ghcr.io
+  imageRepository: email-converter
+  environment: production
+  storageClass: gp3
+  resourceQuota:
+    enabled: true
+    requests:
+      cpu: "4"
+      memory: 8Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
+
+api:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: true
+    minAvailable: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+celeryWorker:
+  replicaCount: 3
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: true
+    minAvailable: 2
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+    limits:
+      cpu: 4000m
+      memory: 4Gi
+
+celeryBeat:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+flower:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+postgresql:
+  enabled: true
+  auth:
+    username: emailconverter
+    database: email_converter
+  primary:
+    persistence:
+      enabled: true
+      size: 100Gi
+      storageClass: gp3
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: true
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: gp3
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+minio:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 200Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10g"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/rate-limit: "10"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()";
+  tls:
+    - secretName: prod-email-converter-tls
+      hosts:
+        - api.emailconverter.com
+  hosts:
+    - host: api.emailconverter.com
+      paths:
+        - path: /
+          pathType: Prefix
+          serviceName: api
+          servicePort: 8000
+
+certificates:
+  enabled: true
+  issuer:
+    name: letsencrypt-prod
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: platform@emailconverter.com
+  secretName: prod-email-converter-tls
+
+networkPolicies:
+  enabled: true
+
+prometheus:
+  enabled: true
+  retention: 30d
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+grafana:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+loki:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+otelCollector:
+  enabled: true
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+cronjobs:
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    retention:
+      days: 30
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    s3:
+      enabled: true
+      bucket: "email-converter-backups"
+      region: "us-east-1"
+  redisBackup:
+    enabled: true
+    schedule: "0 3 * * *"
+    retention:
+      days: 14
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+  backupVerification:
+    enabled: true
+    schedule: "0 6 * * *"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+  drStatusCheck:
+    enabled: true
+    schedule: "*/30 * * * *"
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi
+backup:
+  enabled: true
+  storage:
+    size: 100Gi
+    storageClass: gp3
+  s3:
+    enabled: true
+    bucket: "email-converter-backups"
+    region: "us-east-1"
+    crossRegionBucket: "email-converter-backups-dr"
+    crossRegion: "us-west-2"
+  retention:
+    localDays: 30
+    s3Days: 90
+    glacierDays: 180
+    deepArchiveDays: 365
+  verification:
+    enabled: true
+    schedule: "0 6 * * *"
+  velero:
+    enabled: true
+    schedule: "0 1 * * *"
+    retention: "720h"
+
+# Production secrets MUST be injected via:
+# - Sealed Secrets
+# - External Secrets Operator
+# - AWS Secrets Manager
+# - HashiCorp Vault
+# DO NOT store plaintext secrets in this file!
+secrets:
+  secretKey: "REPLACE_ME"
+  smtpHost: "REPLACE_ME"
+  smtpFrom: "REPLACE_ME"
+  licenseEncryptionKey: "REPLACE_ME_32_CHARS_MIN"
+  grafanaAdminPassword: "REPLACE_ME"
+  minioRootPassword: "REPLACE_ME"
+  redisPassword: "REPLACE_ME"
+  postgresPassword: "REPLACE_ME"
+  postgresUser: "emailconverter"
+  postgresDatabase: "email_converter"

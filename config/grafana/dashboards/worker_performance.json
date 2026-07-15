@@ -1,0 +1,76 @@
+{
+  "dashboard": {
+    "id": null,
+    "title": "Email Converter - Worker Performance",
+    "tags": ["email-converter", "workers"],
+    "timezone": "utc",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Worker Active Tasks",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "email_converter_worker_active_tasks",
+            "legendFormat": "{{worker_name}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+      },
+      {
+        "id": 2,
+        "title": "Worker Utilization",
+        "type": "gauge",
+        "targets": [
+          {
+            "expr": "email_converter_worker_utilization",
+            "legendFormat": "{{worker_name}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+      },
+      {
+        "id": 3,
+        "title": "Queue Length",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "email_converter_queue_length",
+            "legendFormat": "{{queue_name}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+      },
+      {
+        "id": 4,
+        "title": "Conversion Rate",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "rate(email_converter_conversions_total{status=\"success\"}[5m])",
+            "legendFormat": "Success"
+          },
+          {
+            "expr": "rate(email_converter_conversions_total{status=\"failure\"}[5m])",
+            "legendFormat": "Failure"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+      },
+      {
+        "id": 5,
+        "title": "Conversion Duration",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(email_converter_conversion_duration_seconds_bucket[5m]))",
+            "legendFormat": "P95 - {{input_format}} to {{output_format}}"
+          }
+        ],
+        "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
+      }
+    ],
+    "time": { "from": "now-1h", "to": "now" },
+    "refresh": "30s"
+  }
+}

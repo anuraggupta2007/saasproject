@@ -1,0 +1,219 @@
+# =============================================================================
+# Helm Values - Staging
+# =============================================================================
+
+global:
+  imageRegistry: ghcr.io
+  imageRepository: email-converter
+  environment: staging
+  storageClass: gp3
+
+api:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 75
+  pdb:
+    enabled: true
+    minAvailable: 1
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+celeryWorker:
+  replicaCount: 2
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 75
+  pdb:
+    enabled: true
+    minAvailable: 1
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+
+celeryBeat:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+flower:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+postgresql:
+  enabled: true
+  auth:
+    username: emailconverter
+    password: changeme-staging
+    database: email_converter
+    postgresPassword: changeme-staging-postgres
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: gp3
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: changeme-staging-redis
+  master:
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: gp3
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+minio:
+  enabled: true
+  auth:
+    rootUser: minioadmin
+    rootPassword: changeme-staging-minio
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: gp3
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10g"
+  tls:
+    - secretName: staging-email-converter-tls
+      hosts:
+        - staging-api.emailconverter.com
+  hosts:
+    - host: staging-api.emailconverter.com
+      paths:
+        - path: /
+          pathType: Prefix
+          serviceName: api
+          servicePort: 8000
+
+certificates:
+  enabled: true
+  issuer:
+    name: letsencrypt-staging
+    server: https://acme-staging-v02.api.letsencrypt.org/directory
+    email: platform@emailconverter.com
+  secretName: staging-email-converter-tls
+
+networkPolicies:
+  enabled: true
+
+prometheus:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+grafana:
+  enabled: true
+  adminPassword: changeme-staging-grafana
+  persistence:
+    enabled: true
+    size: 5Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+loki:
+  enabled: true
+  persistence:
+    enabled: true
+    size: 20Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+otelCollector:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+cronjobs:
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+secrets:
+  secretKey: changeme-staging-secret-key
+  smtpHost: smtp.gmail.com
+  smtpFrom: noreply@emailconverter.com
+  licenseEncryptionKey: staging-license-key-32-chars-min!!
+  grafanaAdminPassword: changeme-staging-grafana
+  minioRootPassword: changeme-staging-minio
+  redisPassword: changeme-staging-redis
+  postgresPassword: changeme-staging
+  postgresUser: emailconverter
+  postgresDatabase: email_converter

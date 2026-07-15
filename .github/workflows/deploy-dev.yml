@@ -1,0 +1,106 @@
+# =============================================================================
+# Deploy to Development
+# =============================================================================
+# Auto-deploys on push to develop branch
+# Uses dev values with reduced resources
+# =============================================================================
+
+name: Deploy to Development
+
+on:
+  workflow_run:
+    workflows: ["Docker Publish"]
+    types: [completed]
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: "Docker image tag to deploy"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to Dev
+    runs-on: ubuntu-latest
+    environment:
+      name: development
+      url: https://dev-api.emailconverter.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image-tag }}" ]; then
+            echo "tag=${{ inputs.image-tag }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to dev
+        uses: ./.github/actions/helm-deploy
+        with:
+          environment: dev
+          namespace: email-converter-dev
+          image-tag: ${{ steps.tag.outputs.image }}
+          registry: ${{ env.REGISTRY }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
+
+      - name: Notify success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "✅ Dev deploy succeeded",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *Dev Deploy Succeeded*\n*Repo:* ${{ github.repository }}\n*Image:* `${{ steps.tag.outputs.image }}`\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+      - name: Notify failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "❌ Dev deploy failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *Dev Deploy Failed*\n*Repo:* ${{ github.repository }}\n*Image:* `${{ steps.tag.outputs.image }}`\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

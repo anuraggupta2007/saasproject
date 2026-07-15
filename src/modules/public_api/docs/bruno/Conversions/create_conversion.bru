@@ -1,0 +1,25 @@
+meta {
+  name: Create Conversion
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{base_url}}/api/public/v1/conversions
+  body:json {
+    {
+      "upload_id": "00000000-0000-0000-0000-000000000000",
+      "target_format": "pdf"
+    }
+  }
+  auth: none
+}
+
+script {
+  req.header("Authorization", "Bearer {{api_key}}")
+  req.header("Content-Type", "application/json")
+}
+
+assert {
+  res.status: eq 201
+}

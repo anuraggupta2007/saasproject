@@ -1,0 +1,120 @@
+# =============================================================================
+# Rollback Pipeline
+# =============================================================================
+# Emergency rollback to a previous version
+# Can rollback to specific version or previous release
+# =============================================================================
+
+name: Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Target environment"
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      revision:
+        description: "Helm revision to rollback to (0 = previous)"
+        required: true
+        type: string
+        default: "0"
+      image-tag:
+        description: "Specific image tag (optional, overrides revision)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  rollback:
+    name: Rollback to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v4
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+      - name: Get current revision
+        id: current
+        run: |
+          NAMESPACE="email-converter-${{ inputs.environment }}"
+          CURRENT=$(helm history email-converter \
+            -n ${NAMESPACE} \
+            --max 1 \
+            -o json | jq -r '.[0].revision' 2>/dev/null || echo "unknown")
+          echo "revision=${CURRENT}" >> $GITHUB_OUTPUT
+          echo "Current revision: ${CURRENT}"
+
+      - name: Execute rollback
+        run: |
+          NAMESPACE="email-converter-${{ inputs.environment }}"
+
+          if [ -n "${{ inputs.image-tag }}" ]; then
+            echo "Rolling back to image tag: ${{ inputs.image-tag }}"
+            # Get values file for environment
+            VALUES_FILE="k8s/helm/email-converter/values-${{ inputs.environment }}.yaml"
+
+            helm upgrade --install email-converter k8s/helm/email-converter \
+              -f ${VALUES_FILE} \
+              --namespace ${NAMESPACE} \
+              --set "api.image.tag=${{ inputs.image-tag }}" \
+              --set "celeryWorker.image.tag=${{ inputs.image-tag }}" \
+              --set "celeryBeat.image.tag=${{ inputs.image-tag }}" \
+              --set "flower.image.tag=${{ inputs.image-tag }}" \
+              --wait \
+              --timeout 10m \
+              --atomic
+          else
+            echo "Rolling back to revision: ${{ inputs.revision }}"
+            helm rollback email-converter ${{ inputs.revision }} \
+              -n ${NAMESPACE} \
+              --wait \
+              --timeout 10m
+          fi
+
+      - name: Verify rollback
+        run: |
+          NAMESPACE="email-converter-${{ inputs.environment }}"
+          echo "Verifying rollback..."
+          kubectl get pods -n ${NAMESPACE}
+          echo ""
+
+          # Check readiness
+          kubectl wait --for=condition=ready pod \
+            -l app.kubernetes.io/part-of=email-converter \
+            -n ${NAMESPACE} \
+            --timeout=300s
+
+      - name: Notify
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "⚠️ Rollback executed on ${{ inputs.environment }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "⚠️ *Rollback Executed*\n*Environment:* ${{ inputs.environment }}\n*Previous Revision:* ${{ steps.current.outputs.revision }}\n*Target:* ${{ inputs.revision || inputs.image-tag }}\n*Triggered by:* ${{ github.actor }}\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

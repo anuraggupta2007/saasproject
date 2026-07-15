@@ -1,0 +1,485 @@
+# =============================================================================
+# Global Values - Shared across all subcharts
+# =============================================================================
+global:
+  # Container image registry
+  imageRegistry: ghcr.io
+  imageRepository: email-converter
+
+  # Environment (dev, staging, production)
+  environment: production
+
+  # Namespace override
+  namespace: ""
+
+  # Cluster domain
+  clusterDomain: cluster.local
+
+  # Default storage class
+  storageClass: gp3
+
+  # Resource quotas
+  resourceQuota:
+    enabled: true
+    requests:
+      cpu: "4"
+      memory: 8Gi
+    limits:
+      cpu: "8"
+      memory: 16Gi
+
+# =============================================================================
+# API Server
+# =============================================================================
+api:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: api
+    tag: ""  # Uses Chart.appVersion
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8000
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 2Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: true
+    minAvailable: 2
+  startupProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 30
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 0
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 0
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  env:
+    APP_ENV: production
+    DEBUG: "false"
+    LOG_LEVEL: INFO
+    LOG_FORMAT: json
+    WORKERS: "4"
+    PORT: "8000"
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# =============================================================================
+# Celery Worker
+# =============================================================================
+celeryWorker:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: celery-worker
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8001
+  resources:
+    requests:
+      cpu: 1000m
+      memory: 1Gi
+    limits:
+      cpu: 4000m
+      memory: 4Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 8
+    targetCPUUtilizationPercentage: 75
+    targetMemoryUtilizationPercentage: 80
+  pdb:
+    enabled: true
+    minAvailable: 1
+  livenessProbe:
+    exec:
+      command:
+        - python
+        - -c
+        - "import redis; r = redis.Redis.from_url('${REDIS_URL}'); r.ping()"
+    initialDelaySeconds: 15
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 3
+  readinessProbe:
+    exec:
+      command:
+        - python
+        - -c
+        - "import redis; r = redis.Redis.from_url('${REDIS_URL}'); r.ping()"
+    initialDelaySeconds: 5
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  env:
+    APP_ENV: production
+    LOG_LEVEL: INFO
+  queues: celery,uploads,mime,conversion,license,payment,notification,analytics,monitoring,security,search,gateway
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+
+# =============================================================================
+# Celery Beat
+# =============================================================================
+celeryBeat:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: celery-beat
+    tag: ""
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  pdb:
+    enabled: false
+  livenessProbe:
+    exec:
+      command:
+        - python
+        - -c
+        - "import redis; r = redis.Redis.from_url('${REDIS_URL}'); r.ping()"
+    initialDelaySeconds: 15
+    periodSeconds: 60
+    timeoutSeconds: 10
+    failureThreshold: 3
+  env:
+    APP_ENV: production
+    LOG_LEVEL: INFO
+
+# =============================================================================
+# Flower (Celery Monitoring)
+# =============================================================================
+flower:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: flower
+    tag: ""
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 5555
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  pdb:
+    enabled: false
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 5555
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 5555
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+  env:
+    APP_ENV: production
+    LOG_LEVEL: INFO
+
+# =============================================================================
+# PostgreSQL
+# =============================================================================
+postgresql:
+  enabled: true
+  auth:
+    username: postgres
+    password: changeme
+    database: email_converter
+    postgresPassword: changeme
+  primary:
+    persistence:
+      enabled: true
+      size: 50Gi
+      storageClass: gp3
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+    extendedConfiguration: |
+      shared_buffers = 1GB
+      effective_cache_size = 3GB
+      work_mem = 4MB
+      maintenance_work_mem = 256MB
+      max_connections = 200
+      log_min_duration_statement = 1000
+      log_statement = ddl
+      log_checkpoints = on
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    retentionDays: 30
+    s3Bucket: ""
+
+# =============================================================================
+# Redis
+# =============================================================================
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    password: changeme
+  master:
+    persistence:
+      enabled: true
+      size: 10Gi
+      storageClass: gp3
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  replica:
+    replicaCount: 0
+
+# =============================================================================
+# MinIO
+# =============================================================================
+minio:
+  enabled: true
+  auth:
+    rootUser: minioadmin
+    rootPassword: changeme
+  mode: standalone
+  persistence:
+    enabled: true
+    size: 100Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  defaultBuckets:
+    - name: email-converter-uploads
+
+# =============================================================================
+# NGINX Ingress
+# =============================================================================
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10g"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/rate-limit: "10"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()";
+  tls:
+    - secretName: email-converter-tls
+      hosts:
+        - api.emailconverter.com
+  hosts:
+    - host: api.emailconverter.com
+      paths:
+        - path: /
+          pathType: Prefix
+          serviceName: api
+          servicePort: 8000
+
+# =============================================================================
+# Certificates (cert-manager)
+# =============================================================================
+certificates:
+  enabled: true
+  issuer:
+    name: letsencrypt-prod
+    server: https://acme-v02.api.letsencrypt.org/directory
+    email: platform@emailconverter.com
+  secretName: email-converter-tls
+
+# =============================================================================
+# Network Policies
+# =============================================================================
+networkPolicies:
+  enabled: true
+
+# =============================================================================
+# RBAC
+# =============================================================================
+serviceAccount:
+  create: true
+  name: email-converter
+  annotations: {}
+
+rbac:
+  create: true
+
+# =============================================================================
+# Monitoring Stack
+# =============================================================================
+prometheus:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 500m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+  retention: 30d
+
+grafana:
+  enabled: true
+  replicaCount: 1
+  adminUser: admin
+  adminPassword: changeme
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+loki:
+  enabled: true
+  replicaCount: 1
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: gp3
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+otelCollector:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+# =============================================================================
+# CronJobs
+# =============================================================================
+cronjobs:
+  backup:
+    enabled: true
+    schedule: "0 2 * * *"
+    image:
+      repository: postgres
+      tag: "17-alpine"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    retention:
+      days: 30
+
+# =============================================================================
+# Application Secrets (override in values-<env>.yaml)
+# =============================================================================
+secrets:
+  secretKey: "CHANGE_ME_IN_PRODUCTION"
+  smtpHost: ""
+  smtpUser: ""
+  smtpPassword: ""
+  smtpFrom: "noreply@emailconverter.com"
+  googleClientId: ""
+  googleClientSecret: ""
+  microsoftClientId: ""
+  microsoftClientSecret: ""
+  stripeSecretKey: ""
+  stripePublishableKey: ""
+  stripeWebhookSecret: ""
+  razorpayKeyId: ""
+  razorpayKeySecret: ""
+  razorpayWebhookSecret: ""
+  sendgridApiKey: ""
+  sendgridFromEmail: ""
+  twilioAccountSid: ""
+  twilioAuthToken: ""
+  twilioPhoneNumber: ""
+  sentryDsn: ""
+  licenseEncryptionKey: "CHANGE_ME_32_CHARS_MIN"
+  storageAccessKey: ""
+  storageSecretKey: ""
+  grafanaAdminPassword: "admin"
+  minioRootPassword: "changeme"
+  redisPassword: "changeme"
+  postgresPassword: "changeme"
+  postgresUser: "postgres"
+  postgresDatabase: "email_converter"

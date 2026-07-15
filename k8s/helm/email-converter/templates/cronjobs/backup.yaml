@@ -1,0 +1,509 @@
+{{- if .Values.cronjobs.backup.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "email-converter.fullname" . }}-backup
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: email-converter-backup
+spec:
+  schedule: {{ .Values.cronjobs.backup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            {{- include "email-converter.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup
+            app.kubernetes.io/part-of: email-converter-backup
+        spec:
+          serviceAccountName: {{ include "email-converter.fullname" . }}-backup-sa
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: postgres:16-alpine
+              imagePullPolicy: IfNotPresent
+              command:
+                - /bin/bash
+                - -c
+                - |
+                  set -euo pipefail
+                  TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+                  BACKUP_DIR="/backups/postgres"
+                  mkdir -p "$BACKUP_DIR/full" "$BACKUP_DIR/logs"
+                  echo "[$(date -u)] Starting PostgreSQL full backup..."
+                  pg_dump \
+                    -h {{ include "email-converter.fullname" . }}-postgresql \
+                    -U $POSTGRES_USER \
+                    -d $POSTGRES_DB \
+                    --format=plain \
+                    --compress=0 \
+                    --no-owner \
+                    --no-privileges \
+                    2>/dev/null | gzip -9 > "$BACKUP_DIR/full/${TIMESTAMP}_${POSTGRES_DB}_full.sql.gz"
+                  BACKUP_FILE="$BACKUP_DIR/full/${TIMESTAMP}_${POSTGRES_DB}_full.sql.gz"
+                  if [ -f "$BACKUP_FILE" ] && [ -s "$BACKUP_FILE" ]; then
+                    FILE_SIZE=$(stat -c%s "$BACKUP_FILE" 2>/dev/null || stat -f%z "$BACKUP_FILE" 2>/dev/null || echo 0)
+                    CHECKSUM=$(sha256sum "$BACKUP_FILE" | cut -d' ' -f1)
+                    echo "$CHECKSUM  $BACKUP_FILE" > "${BACKUP_FILE}.sha256"
+                    echo "[$(date -u)] Backup completed: ${FILE_SIZE} bytes, SHA256: ${CHECKSUM}"
+                  else
+                    echo "[$(date -u)] ERROR: Backup failed"
+                    exit 1
+                  fi
+                  {{- if .Values.cronjobs.backup.s3.enabled }}
+                  if [ -n "${S3_BACKUP_BUCKET:-}" ]; then
+                    echo "[$(date -u)] Uploading to S3..."
+                    aws s3 cp "$BACKUP_FILE" "s3://${S3_BACKUP_BUCKET}/postgres/full/$(hostname)/${TIMESTAMP}_${POSTGRES_DB}_full.sql.gz" \
+                      --region "${AWS_REGION:-us-east-1}" \
+                      --storage-class STANDARD_IA \
+                      --only-show-errors
+                    aws s3 cp "${BACKUP_FILE}.sha256" "s3://${S3_BACKUP_BUCKET}/postgres/full/$(hostname)/${TIMESTAMP}_${POSTGRES_DB}_full.sql.gz.sha256" \
+                      --region "${AWS_REGION:-us-east-1}" \
+                      --only-show-errors 2>/dev/null || true
+                    echo "[$(date -u)] S3 upload complete"
+                  fi
+                  {{- end }}
+                  echo "[$(date -u)] Cleaning backups older than {{ .Values.cronjobs.backup.retention.days }} days..."
+                  find "$BACKUP_DIR/full" -name "*.sql.gz" -mtime +{{ .Values.cronjobs.backup.retention.days }} -delete 2>/dev/null || true
+                  find "$BACKUP_DIR/full" -name "*.sha256" -mtime +{{ .Values.cronjobs.backup.retention.days }} -delete 2>/dev/null || true
+                  find "$BACKUP_DIR/logs" -name "*.log" -mtime +{{ .Values.cronjobs.backup.retention.days }} -delete 2>/dev/null || true
+                  if [ -n "${PROMETHEUS_PUSHGATEWAY:-}" ]; then
+                    cat <<METRICS | curl -s --data-binary @- "http://${PROMETHEUS_PUSHGATEWAY}/metrics/job/postgres_backup" 2>/dev/null || true
+                  postgres_backup_last_success_timestamp $(date +%s)
+                  postgres_backup_size_bytes ${FILE_SIZE:-0}
+                  postgres_backup_status 1
+                  METRICS
+                  fi
+                  echo "[$(date -u)] Backup job finished successfully"
+              env:
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: POSTGRES_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: POSTGRES_PASSWORD
+                - name: POSTGRES_DB
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: POSTGRES_DB
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: POSTGRES_PASSWORD
+                - name: S3_BACKUP_BUCKET
+                  value: {{ .Values.cronjobs.backup.s3.bucket | default "" | quote }}
+                - name: AWS_REGION
+                  value: {{ .Values.cronjobs.backup.s3.region | default "us-east-1" | quote }}
+                - name: AWS_DEFAULT_REGION
+                  value: {{ .Values.cronjobs.backup.s3.region | default "us-east-1" | quote }}
+                - name: PROMETHEUS_PUSHGATEWAY
+                  value: "prometheus-pushgateway:9091"
+              envFrom:
+                - secretRef:
+                    name: aws-credentials
+                    optional: true
+              resources:
+                {{- toYaml .Values.cronjobs.backup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backups
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "email-converter.fullname" . }}-backup-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "email-converter.fullname" . }}-backup-pvc
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: email-converter-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.global.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.backup.storage.size | default "100Gi" }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "email-converter.fullname" . }}-backup-sa
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-sa
+    app.kubernetes.io/part-of: email-converter-backup
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "email-converter.fullname" . }}-backup-role
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "email-converter.fullname" . }}-backup-rolebinding
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "email-converter.fullname" . }}-backup-sa
+    namespace: {{ include "email-converter.namespace" . }}
+roleRef:
+  kind: Role
+  name: {{ include "email-converter.fullname" . }}-backup-role
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- if .Values.cronjobs.redisBackup.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "email-converter.fullname" . }}-redis-backup
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis-backup
+    app.kubernetes.io/part-of: email-converter-backup
+spec:
+  schedule: {{ .Values.cronjobs.redisBackup.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            {{- include "email-converter.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: redis-backup
+            app.kubernetes.io/part-of: email-converter-backup
+        spec:
+          serviceAccountName: {{ include "email-converter.fullname" . }}-backup-sa
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+          restartPolicy: OnFailure
+          containers:
+            - name: redis-backup
+              image: redis:7-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -euo pipefail
+                  TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+                  BACKUP_DIR="/backups/redis"
+                  mkdir -p "$BACKUP_DIR/rdb" "$BACKUP_DIR/logs"
+                  echo "[$(date -u)] Starting Redis RDB backup..."
+                  REDIS_CLI="redis-cli -h {{ include "email-converter.fullname" . }}-redis -p 6379"
+                  if [ -n "${REDIS_PASSWORD:-}" ]; then
+                    REDIS_CLI="redis-cli -h {{ include "email-converter.fullname" . }}-redis -p 6379 -a ${REDIS_PASSWORD} --no-auth-warning"
+                  fi
+                  $REDIS_CLI BGSAVE
+                  sleep 5
+                  RDB_DIR=$($REDIS_CLI CONFIG GET dir | tail -1)
+                  RDB_FILE=$($REDIS_CLI CONFIG GET dbfilename | tail -1)
+                  RDB_PATH="${RDB_DIR}/${RDB_FILE}"
+                  if [ -f "$RDB_PATH" ]; then
+                    BACKUP_FILE="$BACKUP_DIR/rdb/${TIMESTAMP}_dump.rdb.gz"
+                    gzip -9 -c "$RDB_PATH" > "$BACKUP_FILE"
+                    FILE_SIZE=$(stat -c%s "$BACKUP_FILE" 2>/dev/null || stat -f%z "$BACKUP_FILE" 2>/dev/null || echo 0)
+                    CHECKSUM=$(sha256sum "$BACKUP_FILE" | cut -d' ' -f1)
+                    echo "$CHECKSUM  $BACKUP_FILE" > "${BACKUP_FILE}.sha256"
+                    echo "[$(date -u)] RDB backup completed: ${FILE_SIZE} bytes"
+                  else
+                    echo "[$(date -u)] ERROR: RDB file not found"
+                    exit 1
+                  fi
+                  echo "[$(date -u)] Cleaning backups older than {{ .Values.cronjobs.redisBackup.retention.days }} days..."
+                  find "$BACKUP_DIR/rdb" -name "*.rdb.gz" -mtime +{{ .Values.cronjobs.redisBackup.retention.days }} -delete 2>/dev/null || true
+                  find "$BACKUP_DIR/rdb" -name "*.sha256" -mtime +{{ .Values.cronjobs.redisBackup.retention.days }} -delete 2>/dev/null || true
+                  echo "[$(date -u)] Redis backup job finished"
+              env:
+                - name: REDIS_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: REDIS_PASSWORD
+              resources:
+                {{- toYaml .Values.cronjobs.redisBackup.resources | nindent 16 }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backups
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "email-converter.fullname" . }}-backup-pvc
+{{- end }}
+{{- if .Values.cronjobs.backupVerification.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "email-converter.fullname" . }}-backup-verification
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backup-verification
+    app.kubernetes.io/part-of: email-converter-backup
+spec:
+  schedule: {{ .Values.cronjobs.backupVerification.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            {{- include "email-converter.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: backup-verification
+            app.kubernetes.io/part-of: email-converter-backup
+        spec:
+          serviceAccountName: {{ include "email-converter.fullname" . }}-backup-sa
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+          restartPolicy: OnFailure
+          containers:
+            - name: verify
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  set -euo pipefail
+                  echo "[$(date -u)] Starting backup verification..."
+                  BACKUP_DIR="/backups"
+                  FAILED=0
+                  LATEST=$(find "$BACKUP_DIR/postgres/full" -name "*_full.sql.gz" -type f 2>/dev/null | sort -r | head -1)
+                  if [ -z "$LATEST" ]; then
+                    echo "[$(date -u)] FAIL: No PostgreSQL backup found"
+                    FAILED=1
+                  else
+                    echo "[$(date -u)] Checking: $(basename $LATEST)"
+                    if gzip -t "$LATEST" 2>/dev/null; then
+                      echo "[$(date -u)] PASS: gzip integrity OK"
+                    else
+                      echo "[$(date -u)] FAIL: gzip integrity check failed"
+                      FAILED=1
+                    fi
+                    if [ -f "${LATEST}.sha256" ]; then
+                      EXPECTED=$(cut -d' ' -f1 < "${LATEST}.sha256")
+                      ACTUAL=$(sha256sum "$LATEST" | cut -d' ' -f1)
+                      if [ "$EXPECTED" = "$ACTUAL" ]; then
+                        echo "[$(date -u)] PASS: SHA-256 checksum verified"
+                      else
+                        echo "[$(date -u)] FAIL: Checksum mismatch"
+                        FAILED=1
+                      fi
+                    fi
+                    FILE_SIZE=$(stat -c%s "$LATEST" 2>/dev/null || stat -f%z "$LATEST" 2>/dev/null || echo 0)
+                    if [ "$FILE_SIZE" -gt 1024 ]; then
+                      echo "[$(date -u)] PASS: Backup size OK (${FILE_SIZE} bytes)"
+                    else
+                      echo "[$(date -u)] FAIL: Backup too small"
+                      FAILED=1
+                    fi
+                  fi
+                  REDIS_BACKUP=$(find "$BACKUP_DIR/redis/rdb" -name "*.rdb.gz" -type f 2>/dev/null | sort -r | head -1)
+                  if [ -n "$REDIS_BACKUP" ]; then
+                    if gzip -t "$REDIS_BACKUP" 2>/dev/null; then
+                      echo "[$(date -u)] PASS: Redis RDB backup OK"
+                    else
+                      echo "[$(date -u)] FAIL: Redis RDB backup corrupt"
+                      FAILED=1
+                    fi
+                  else
+                    echo "[$(date -u)] WARN: No Redis backup found"
+                  fi
+                  if [ -n "${PROMETHEUS_PUSHGATEWAY:-}" ]; then
+                    STATUS=1
+                    [ $FAILED -eq 1 ] && STATUS=0
+                    cat <<METRICS | curl -s --data-binary @- "http://${PROMETHEUS_PUSHGATEWAY}/metrics/job/backup_verification" 2>/dev/null || true
+                  backup_verification_last_timestamp $(date +%s)
+                  backup_verification_status ${STATUS}
+                  METRICS
+                  fi
+                  if [ $FAILED -eq 1 ]; then
+                    echo "[$(date -u)] VERIFICATION FAILED"
+                    exit 1
+                  fi
+                  echo "[$(date -u)] All verification checks passed"
+              env:
+                - name: PROMETHEUS_PUSHGATEWAY
+                  value: "prometheus-pushgateway:9091"
+              resources:
+                {{- toYaml .Values.cronjobs.backupVerification.resources | nindent 16 }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backups
+                  readOnly: true
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "email-converter.fullname" . }}-backup-pvc
+                readOnly: true
+{{- end }}
+{{- if .Values.cronjobs.drStatusCheck.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "email-converter.fullname" . }}-dr-status
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dr-status
+    app.kubernetes.io/part-of: email-converter-backup
+spec:
+  schedule: {{ .Values.cronjobs.drStatusCheck.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300
+      template:
+        metadata:
+          labels:
+            {{- include "email-converter.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: dr-status
+            app.kubernetes.io/part-of: email-converter-backup
+        spec:
+          serviceAccountName: {{ include "email-converter.fullname" . }}-backup-sa
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+          restartPolicy: OnFailure
+          containers:
+            - name: dr-status
+              image: postgres:16-alpine
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  echo "=========================================="
+                  echo "Disaster Recovery Status"
+                  echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                  echo "=========================================="
+                  echo ""
+                  echo "--- Database Status ---"
+                  if pg_isready -h {{ include "email-converter.fullname" . }}-postgresql -p 5432 -U $POSTGRES_USER > /dev/null 2>&1; then
+                    echo "  PostgreSQL: CONNECTED"
+                    DB_SIZE=$(psql -h {{ include "email-converter.fullname" . }}-postgresql -U $POSTGRES_USER -d $POSTGRES_DB -t -c "SELECT pg_size_pretty(pg_database_size('${POSTGRES_DB}'));" 2>/dev/null | tr -d ' ')
+                    echo "  Database size: ${DB_SIZE:-unknown}"
+                  else
+                    echo "  PostgreSQL: DISCONNECTED"
+                  fi
+                  echo ""
+                  echo "--- Backup Status ---"
+                  LATEST_PG=$(find /backups/postgres/full -name "*_full.sql.gz" -type f 2>/dev/null | sort -r | head -1)
+                  if [ -n "$LATEST_PG" ]; then
+                    PG_AGE=$(( ($(date +%s) - $(stat -c%Y "$LATEST_PG" 2>/dev/null || stat -f%m "$LATEST_PG" 2>/dev/null || echo "0")) / 3600 ))
+                    echo "  PostgreSQL: $(basename "$LATEST_PG") (${PG_AGE}h ago)"
+                  else
+                    echo "  PostgreSQL: NO BACKUPS FOUND"
+                  fi
+                  LATEST_RDB=$(find /backups/redis/rdb -name "*.rdb.gz" -type f 2>/dev/null | sort -r | head -1)
+                  if [ -n "$LATEST_RDB" ]; then
+                    RDB_AGE=$(( ($(date +%s) - $(stat -c%Y "$LATEST_RDB" 2>/dev/null || stat -f%m "$LATEST_RDB" 2>/dev/null || echo "0")) / 3600 ))
+                    echo "  Redis: $(basename "$LATEST_RDB") (${RDB_AGE}h ago)"
+                  else
+                    echo "  Redis: NO BACKUPS FOUND"
+                  fi
+                  echo ""
+                  echo "--- RPO Compliance ---"
+                  if [ -n "$LATEST_PG" ]; then
+                    RPO_MINUTES=$(( ($(date +%s) - $(stat -c%Y "$LATEST_PG" 2>/dev/null || stat -f%m "$LATEST_PG" 2>/dev/null || echo "0")) / 60 ))
+                    if [ "$RPO_MINUTES" -le 15 ]; then
+                      echo "  RPO (<15min): MET (${RPO_MINUTES}min)"
+                    else
+                      echo "  RPO (<15min): NOT MET (${RPO_MINUTES}min)"
+                    fi
+                  fi
+                  echo "  RTO (<1hr): Manual verification required"
+                  echo "=========================================="
+              env:
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: POSTGRES_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: POSTGRES_PASSWORD
+                - name: POSTGRES_DB
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: POSTGRES_DB
+                - name: PGPASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "email-converter.fullname" . }}-secrets
+                      key: POSTGRES_PASSWORD
+              resources:
+                {{- toYaml .Values.cronjobs.drStatusCheck.resources | nindent 16 }}
+              volumeMounts:
+                - name: backup
+                  mountPath: /backups
+                  readOnly: true
+          volumes:
+            - name: backup
+              persistentVolumeClaim:
+                claimName: {{ include "email-converter.fullname" . }}-backup-pvc
+                readOnly: true
+{{- end }}

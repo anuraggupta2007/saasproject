@@ -1,0 +1,247 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-backup-script
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/part-of: email-converter-backup
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+    BACKUP_DIR="/backups/postgres"
+    RETENTION_DAYS=${RETENTION_DAYS:-30}
+
+    mkdir -p "${BACKUP_DIR}/full" "${BACKUP_DIR}/logs"
+
+    echo "[$(date -u)] Starting PostgreSQL full backup..."
+
+    pg_dump \
+      -h "${POSTGRES_HOST}" \
+      -p "${POSTGRES_PORT:-5432}" \
+      -U "${POSTGRES_USER}" \
+      -d "${POSTGRES_DB}" \
+      --format=plain \
+      --compress=0 \
+      --no-owner \
+      --no-privileges \
+      2>/dev/null | gzip -9 > "${BACKUP_DIR}/full/${TIMESTAMP}_${POSTGRES_DB}_full.sql.gz"
+
+    BACKUP_FILE="${BACKUP_DIR}/full/${TIMESTAMP}_${POSTGRES_DB}_full.sql.gz"
+    FILE_SIZE=$(stat -c%s "$BACKUP_FILE" 2>/dev/null || stat -f%z "$BACKUP_FILE" 2>/dev/null || echo 0)
+    CHECKSUM=$(sha256sum "$BACKUP_FILE" | cut -d' ' -f1)
+    echo "$CHECKSUM  $BACKUP_FILE" > "${BACKUP_FILE}.sha256"
+
+    echo "[$(date -u)] Backup complete: ${FILE_SIZE} bytes, SHA256: ${CHECKSUM}"
+
+    # Upload to S3
+    if [ -n "${S3_BACKUP_BUCKET:-}" ]; then
+      echo "[$(date -u)] Uploading to S3..."
+      aws s3 cp "$BACKUP_FILE" "s3://${S3_BACKUP_BUCKET}/postgres/full/${HOSTNAME}/${TIMESTAMP}_${POSTGRES_DB}_full.sql.gz" \
+        --region "${AWS_REGION:-us-east-1}" \
+        --storage-class STANDARD_IA \
+        --only-show-errors
+      aws s3 cp "${BACKUP_FILE}.sha256" "s3://${S3_BACKUP_BUCKET}/postgres/full/${HOSTNAME}/${TIMESTAMP}_${POSTGRES_DB}_full.sql.gz.sha256" \
+        --region "${AWS_REGION:-us-east-1}" \
+        --only-show-errors 2>/dev/null || true
+      echo "[$(date -u)] S3 upload complete"
+    fi
+
+    # Rotate old backups
+    echo "[$(date -u)] Rotating backups older than ${RETENTION_DAYS} days..."
+    find "${BACKUP_DIR}/full" -name "*.sql.gz" -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
+    find "${BACKUP_DIR}/full" -name "*.sha256" -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
+    find "${BACKUP_DIR}/logs" -name "*.log" -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
+
+    # Push metrics
+    if [ -n "${PROMETHEUS_PUSHGATEWAY:-}" ]; then
+      cat <<EOF | curl -s --data-binary @- "http://${PROMETHEUS_PUSHGATEWAY}/metrics/job/postgres_backup" 2>/dev/null || true
+    postgres_backup_last_success_timestamp $(date +%s)
+    postgres_backup_size_bytes ${FILE_SIZE}
+    postgres_backup_status 1
+    EOF
+    fi
+
+    echo "[$(date -u)] Backup job finished successfully"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-backup-script
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: redis-backup
+    app.kubernetes.io/part-of: email-converter-backup
+data:
+  backup.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    TIMESTAMP=$(date -u +%Y%m%dT%H%M%SZ)
+    BACKUP_DIR="/backups/redis"
+    RETENTION_DAYS=${RETENTION_DAYS:-14}
+
+    mkdir -p "${BACKUP_DIR}/rdb" "${BACKUP_DIR}/logs"
+
+    echo "[$(date -u)] Starting Redis RDB backup..."
+
+    REDIS_CLI="redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT:-6379}"
+    if [ -n "${REDIS_PASSWORD:-}" ]; then
+      REDIS_CLI="redis-cli -h ${REDIS_HOST} -p ${REDIS_PORT:-6379} -a ${REDIS_PASSWORD} --no-auth-warning"
+    fi
+
+    # Trigger BGSAVE
+    $REDIS_CLI BGSAVE
+
+    # Wait for completion
+    WAIT=0
+    MAX_WAIT=300
+    while [ $WAIT -lt $MAX_WAIT ]; do
+      LAST_SAVE=$($REDIS_CLI LASTSAVE)
+      sleep 2
+      WAIT=$((WAIT + 2))
+      NEW_SAVE=$REDIS_CLI LASTSAVE
+      if [ "$NEW_SAVE" != "$LAST_SAVE" ] || [ $WAIT -ge 10 ]; then
+        break
+      fi
+    done
+
+    # Find and copy RDB
+    RDB_DIR=$($REDIS_CLI CONFIG GET dir | tail -1)
+    RDB_FILE=$($REDIS_CLI CONFIG GET dbfilename | tail -1)
+    RDB_PATH="${RDB_DIR}/${RDB_FILE}"
+
+    if [ -f "$RDB_PATH" ]; then
+      BACKUP_FILE="${BACKUP_DIR}/rdb/${TIMESTAMP}_dump.rdb.gz"
+      gzip -9 -c "$RDB_PATH" > "$BACKUP_FILE"
+      FILE_SIZE=$(stat -c%s "$BACKUP_FILE" 2>/dev/null || stat -f%z "$BACKUP_FILE" 2>/dev/null || echo 0)
+      CHECKSUM=$(sha256sum "$BACKUP_FILE" | cut -d' ' -f1)
+      echo "$CHECKSUM  $BACKUP_FILE" > "${BACKUP_FILE}.sha256"
+
+      echo "[$(date -u)] RDB backup complete: ${FILE_SIZE} bytes"
+
+      # Upload to S3
+      if [ -n "${S3_BACKUP_BUCKET:-}" ]; then
+        aws s3 cp "$BACKUP_FILE" "s3://${S3_BACKUP_BUCKET}/redis/rdb/${HOSTNAME}/${TIMESTAMP}_dump.rdb.gz" \
+          --region "${AWS_REGION:-us-east-1}" \
+          --storage-class STANDARD_IA \
+          --only-show-errors
+        echo "[$(date -u)] S3 upload complete"
+      fi
+    else
+      echo "[$(date -u)] ERROR: RDB file not found at $RDB_PATH"
+      exit 1
+    fi
+
+    # Rotate
+    find "${BACKUP_DIR}/rdb" -name "*.rdb.gz" -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
+    find "${BACKUP_DIR}/rdb" -name "*.sha256" -mtime "+${RETENTION_DAYS}" -delete 2>/dev/null || true
+
+    echo "[$(date -u)] Redis backup job finished"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: verify-backup-script
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: verify-backup
+    app.kubernetes.io/part-of: email-converter-backup
+data:
+  verify.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    echo "[$(date -u)] Starting backup verification..."
+
+    BACKUP_DIR="/backups/postgres"
+    FAILED=0
+
+    # Check latest PostgreSQL backup
+    LATEST=$(find "${BACKUP_DIR}/full" -name "*_full.sql.gz" -type f 2>/dev/null | sort -r | head -1)
+    if [ -z "$LATEST" ]; then
+      echo "[$(date -u)] FAIL: No PostgreSQL backup found"
+      FAILED=1
+    else
+      echo "[$(date -u)] Checking: $(basename $LATEST)"
+
+      # Verify gzip
+      if gzip -t "$LATEST" 2>/dev/null; then
+        echo "[$(date -u)] PASS: gzip integrity OK"
+      else
+        echo "[$(date -u)] FAIL: gzip integrity check failed"
+        FAILED=1
+      fi
+
+      # Verify checksum
+      if [ -f "${LATEST}.sha256" ]; then
+        EXPECTED=$(cut -d' ' -f1 < "${LATEST}.sha256")
+        ACTUAL=$(sha256sum "$LATEST" | cut -d' ' -f1)
+        if [ "$EXPECTED" = "$ACTUAL" ]; then
+          echo "[$(date -u)] PASS: SHA-256 checksum verified"
+        else
+          echo "[$(date -u)] FAIL: Checksum mismatch"
+          FAILED=1
+        fi
+      fi
+
+      # Verify size
+      FILE_SIZE=$(stat -c%s "$LATEST" 2>/dev/null || stat -f%z "$LATEST" 2>/dev/null || echo 0)
+      if [ "$FILE_SIZE" -gt 1024 ]; then
+        echo "[$(date -u)] PASS: Backup size OK (${FILE_SIZE} bytes)"
+      else
+        echo "[$(date -u)] FAIL: Backup too small (${FILE_SIZE} bytes)"
+        FAILED=1
+      fi
+
+      # Verify age
+      BACKUP_AGE=$(( ($(date +%s) - $(stat -c%Y "$LATEST" 2>/dev/null || stat -f%m "$LATEST" 2>/dev/null || echo "0")) / 3600 ))
+      if [ "$BACKUP_AGE" -lt 25 ]; then
+        echo "[$(date -u)] PASS: Backup is ${BACKUP_AGE}h old (within window)"
+      else
+        echo "[$(date -u)] WARN: Backup is ${BACKUP_AGE}h old"
+      fi
+
+      # Check S3
+      if [ -n "${S3_BACKUP_BUCKET:-}" ]; then
+        BACKUP_NAME=$(basename "$LATEST")
+        if aws s3 ls "s3://${S3_BACKUP_BUCKET}/postgres/full/${HOSTNAME}/${BACKUP_NAME}" --region "${AWS_REGION:-us-east-1}" > /dev/null 2>&1; then
+          echo "[$(date -u)] PASS: Backup found in S3"
+        else
+          echo "[$(date -u)] WARN: Backup not in S3"
+        fi
+      fi
+    fi
+
+    # Check Redis backup
+    REDIS_BACKUP=$(find "/backups/redis/rdb" -name "*.rdb.gz" -type f 2>/dev/null | sort -r | head -1)
+    if [ -n "$REDIS_BACKUP" ]; then
+      if gzip -t "$REDIS_BACKUP" 2>/dev/null; then
+        echo "[$(date -u)] PASS: Redis RDB backup OK"
+      else
+        echo "[$(date -u)] FAIL: Redis RDB backup corrupt"
+        FAILED=1
+      fi
+    else
+      echo "[$(date -u)] WARN: No Redis backup found"
+    fi
+
+    # Push verification metrics
+    if [ -n "${PROMETHEUS_PUSHGATEWAY:-}" ]; then
+      STATUS=1
+      [ $FAILED -eq 1 ] && STATUS=0
+      cat <<EOF | curl -s --data-binary @- "http://${PROMETHEUS_PUSHGATEWAY}/metrics/job/backup_verification" 2>/dev/null || true
+    backup_verification_last_timestamp $(date +%s)
+    backup_verification_status ${STATUS}
+    EOF
+    fi
+
+    if [ $FAILED -eq 1 ]; then
+      echo "[$(date -u)] VERIFICATION FAILED"
+      exit 1
+    fi
+
+    echo "[$(date -u)] All verification checks passed"

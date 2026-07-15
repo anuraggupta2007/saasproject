@@ -1,0 +1,250 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-alerts-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: backup-alerts
+data:
+  backup-alerts.yml: |
+    groups:
+      - name: backup_alerts
+        rules:
+          # PostgreSQL Backup Alerts
+          - alert: PostgresBackupMissing
+            expr: |
+              (time() - postgres_backup_last_success_timestamp{job="postgres_backup"} > 86400)
+            for: 5m
+            labels:
+              severity: critical
+              service: postgres
+              category: backup
+            annotations:
+              summary: "PostgreSQL backup missing for >24 hours"
+              description: "No successful PostgreSQL backup in {{ $value | humanizeDuration }}. Host: {{ $labels.host }}"
+              runbook_url: "https://wiki.internal/runbooks/postgres-backup-missing"
+              team: sre
+
+          - alert: PostgresBackupFailed
+            expr: |
+              postgres_backup_status{job="postgres_backup"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              service: postgres
+              category: backup
+            annotations:
+              summary: "PostgreSQL backup failed"
+              description: "PostgreSQL backup failed on host {{ $labels.host }}. Type: {{ $labels.type }}"
+              runbook_url: "https://wiki.internal/runbooks/postgres-backup-failed"
+              team: sre
+
+          - alert: PostgresBackupStale
+            expr: |
+              (time() - postgres_backup_last_success_timestamp{job="postgres_backup"} > 54000)
+            for: 5m
+            labels:
+              severity: warning
+              service: postgres
+              category: backup
+            annotations:
+              summary: "PostgreSQL backup is >15 hours old"
+              description: "Last PostgreSQL backup was {{ $value | humanizeDuration }} ago. Host: {{ $labels.host }}"
+              runbook_url: "https://wiki.internal/runbooks/postgres-backup-stale"
+              team: sre
+
+          - alert: PostgresBackupTooLarge
+            expr: |
+              postgres_backup_size_bytes{job="postgres_backup"} > 10737418240
+            for: 1m
+            labels:
+              severity: warning
+              service: postgres
+              category: backup
+            annotations:
+              summary: "PostgreSQL backup size >10GB"
+              description: "PostgreSQL backup is {{ $value | humanize1024 }}B. Host: {{ $labels.host }}"
+
+          # Redis Backup Alerts
+          - alert: RedisBackupMissing
+            expr: |
+              (time() - redis_backup_last_success_timestamp{job="redis_backup"} > 86400)
+            for: 5m
+            labels:
+              severity: critical
+              service: redis
+              category: backup
+            annotations:
+              summary: "Redis backup missing for >24 hours"
+              description: "No successful Redis backup in {{ $value | humanizeDuration }}. Host: {{ $labels.host }}"
+              runbook_url: "https://wiki.internal/runbooks/redis-backup-missing"
+              team: sre
+
+          - alert: RedisBackupFailed
+            expr: |
+              redis_backup_status{job="redis_backup"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              service: redis
+              category: backup
+            annotations:
+              summary: "Redis backup failed"
+              description: "Redis backup failed on host {{ $labels.host }}. Type: {{ $labels.type }}"
+              runbook_url: "https://wiki.internal/runbooks/redis-backup-failed"
+              team: sre
+
+          - alert: RedisBackupStale
+            expr: |
+              (time() - redis_backup_last_success_timestamp{job="redis_backup"} > 54000)
+            for: 5m
+            labels:
+              severity: warning
+              service: redis
+              category: backup
+            annotations:
+              summary: "Redis backup is >15 hours old"
+              description: "Last Redis backup was {{ $value | humanizeDuration }} ago. Host: {{ $labels.host }}"
+
+          # Backup Verification Alerts
+          - alert: BackupVerificationFailed
+            expr: |
+              backup_verification_status{job="backup_verification"} == 0
+            for: 1m
+            labels:
+              severity: critical
+              service: backup
+              category: verification
+            annotations:
+              summary: "Backup verification failed"
+              description: "Backup verification failed for {{ $labels.test }} on host {{ $labels.host }}"
+              runbook_url: "https://wiki.internal/runbooks/backup-verification-failed"
+              team: sre
+
+          - alert: BackupVerificationStale
+            expr: |
+              (time() - backup_verification_last_timestamp{job="backup_verification"} > 172800)
+            for: 5m
+            labels:
+              severity: warning
+              service: backup
+              category: verification
+            annotations:
+              summary: "Backup verification not run in >48 hours"
+              description: "Last backup verification was {{ $value | humanizeDuration }} ago. Host: {{ $labels.host }}"
+
+          # RDS Backup Alerts (AWS CloudWatch)
+          - alert: RDSAutomatedBackupDisabled
+            expr: |
+              rds_latest_restorable_time < (time() - 3600)
+            for: 10m
+            labels:
+              severity: critical
+              service: postgres
+              category: backup
+              provider: aws
+            annotations:
+              summary: "RDS automated backups are stale"
+              description: "RDS latest restorable time is more than 1 hour old"
+              runbook_url: "https://wiki.internal/runbooks/rds-backup-stale"
+              team: sre
+
+          # Cross-Region Replication Alerts
+          - alert: S3ReplicationLag
+            expr: |
+              aws_s3_replication_latency_seconds > 900
+            for: 10m
+            labels:
+              severity: warning
+              service: s3
+              category: replication
+            annotations:
+              summary: "S3 cross-region replication lag >15 minutes"
+              description: "S3 replication latency is {{ $value | humanizeDuration }}"
+
+          # Backup Storage Alerts
+          - alert: BackupStorageHigh
+            expr: |
+              (backup_storage_used_bytes / backup_storage_total_bytes) > 0.85
+            for: 10m
+            labels:
+              severity: warning
+              service: backup
+              category: storage
+            annotations:
+              summary: "Backup storage usage >85%"
+              description: "Backup storage is {{ $value | humanizePercentage }} full"
+
+          - alert: BackupStorageCritical
+            expr: |
+              (backup_storage_used_bytes / backup_storage_total_bytes) > 0.95
+            for: 5m
+            labels:
+              severity: critical
+              service: backup
+              category: storage
+            annotations:
+              summary: "Backup storage usage >95%"
+              description: "Backup storage is critically full at {{ $value | humanizePercentage }}"
+
+          # Velero Alerts
+          - alert: VeleroBackupFailed
+            expr: |
+              velero_backup_failure_total > 0
+            for: 5m
+            labels:
+              severity: critical
+              service: kubernetes
+              category: backup
+            annotations:
+              summary: "Velero backup failed"
+              description: "{{ $value }} Velero backup failures detected"
+
+          - alert: VeleroBackupMissing
+            expr: |
+              (time() - velero_backup_last_successful_timestamp) > 86400
+            for: 5m
+            labels:
+              severity: critical
+              service: kubernetes
+              category: backup
+            annotations:
+              summary: "Velero backup missing for >24 hours"
+              description: "No successful Velero backup in {{ $value | humanizeDuration }}"
+
+          # Database Restore Test Alerts
+          - alert: RestoreTestOverdue
+            expr: |
+              (time() - restore_test_last_timestamp) > 2592000
+            for: 1h
+            labels:
+              severity: warning
+              service: backup
+              category: testing
+            annotations:
+              summary: "Restore test not performed in >30 days"
+              description: "Last restore test was {{ $value | humanizeDuration }} ago"
+
+      - name: backup_rules
+        interval: 60s
+        rules:
+          # Record rules for backup metrics aggregation
+          - record: backup:postgres_last_success:hours
+            expr: |
+              (time() - postgres_backup_last_success_timestamp{job="postgres_backup"}) / 3600
+
+          - record: backup:redis_last_success:hours
+            expr: |
+              (time() - redis_backup_last_success_timestamp{job="redis_backup"}) / 3600
+
+          - record: backup:postgres_avg_duration:minutes
+            expr: |
+              avg_over_time(postgres_backup_duration_seconds{job="postgres_backup"}[24h]) / 60
+
+          - record: backup:postgres_avg_size:bytes
+            expr: |
+              avg_over_time(postgres_backup_size_bytes{job="postgres_backup"}[7d])
+
+          - record: backup:success_rate:24h
+            expr: |
+              avg_over_time(postgres_backup_status{job="postgres_backup"}[24h])

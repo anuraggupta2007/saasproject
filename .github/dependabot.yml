@@ -1,0 +1,96 @@
+# =============================================================================
+# Dependabot Configuration
+# =============================================================================
+# Automated dependency updates for pip, Docker, and GitHub Actions
+# =============================================================================
+
+version: 2
+updates:
+  # Python dependencies
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    open-pull-requests-limit: 10
+    reviewers:
+      - "email-converter/platform-team"
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps"
+      include: scope
+    groups:
+      fastapi:
+        patterns:
+          - "fastapi"
+          - "uvicorn"
+          - "starlette"
+      sqlalchemy:
+        patterns:
+          - "sqlalchemy"
+          - "asyncpg"
+      celery:
+        patterns:
+          - "celery"
+          - "redis"
+      security:
+        patterns:
+          - "python-jose"
+          - "argon2-cffi"
+          - "cryptography"
+      monitoring:
+        patterns:
+          - "sentry-sdk"
+          - "structlog"
+
+  # Docker
+  - package-ecosystem: docker
+    directory: /docker
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps"
+      include: scope
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "deps"
+      include: scope
+
+  # Helm
+  - package-ecosystem: docker
+    directory: /k8s/helm/email-converter
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: UTC
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "helm"
+    commit-message:
+      prefix: "deps"
+      include: scope

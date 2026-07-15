@@ -1,0 +1,372 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: postgres-backup
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: postgres-backup
+    app.kubernetes.io/part-of: email-converter-backup
+    app.kubernetes.io/component: database
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-backup
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: postgres-backup
+            app.kubernetes.io/component: backup
+        spec:
+          serviceAccountName: backup-sa
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+          containers:
+            - name: postgres-backup
+              image: postgres:16-alpine
+              command: ["/bin/bash", "/scripts/backup.sh"]
+              env:
+                - name: POSTGRES_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: POSTGRES_HOST
+                - name: POSTGRES_PORT
+                  value: "5432"
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: POSTGRES_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: POSTGRES_PASSWORD
+                - name: POSTGRES_DB
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: POSTGRES_DB
+                - name: S3_BACKUP_BUCKET
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: S3_BACKUP_BUCKET
+                      optional: true
+                - name: AWS_REGION
+                  value: "us-east-1"
+                - name: AWS_DEFAULT_REGION
+                  value: "us-east-1"
+                - name: RETENTION_DAYS
+                  value: "30"
+                - name: PROMETHEUS_PUSHGATEWAY
+                  value: "prometheus-pushgateway:9091"
+              envFrom:
+                - secretRef:
+                    name: aws-credentials
+                    optional: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+              volumeMounts:
+                - name: backup-scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backup-storage
+                  mountPath: /backups
+                - name: postgres-password
+                  mountPath: /var/run/secrets/postgres
+                  readOnly: true
+              livenessProbe:
+                exec:
+                  command:
+                    - /bin/sh
+                    - -c
+                    - "pg_isready -h ${POSTGRES_HOST} -p 5432 -U ${POSTGRES_USER}"
+                initialDelaySeconds: 30
+                periodSeconds: 30
+          volumes:
+            - name: backup-scripts
+              configMap:
+                name: postgres-backup-script
+                defaultMode: 0755
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: backup-pvc
+            - name: postgres-password
+              secret:
+                secretName: email-converter-secrets
+                items:
+                  - key: POSTGRES_PASSWORD
+                    path: password
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: redis-backup
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: redis-backup
+    app.kubernetes.io/part-of: email-converter-backup
+    app.kubernetes.io/component: cache
+spec:
+  schedule: "0 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: redis-backup
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: redis-backup
+            app.kubernetes.io/component: backup
+        spec:
+          serviceAccountName: backup-sa
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+          containers:
+            - name: redis-backup
+              image: redis:7-alpine
+              command: ["/bin/sh", "/scripts/backup.sh"]
+              env:
+                - name: REDIS_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: REDIS_HOST
+                - name: REDIS_PORT
+                  value: "6379"
+                - name: REDIS_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: REDIS_PASSWORD
+                - name: S3_BACKUP_BUCKET
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: S3_BACKUP_BUCKET
+                      optional: true
+                - name: AWS_REGION
+                  value: "us-east-1"
+                - name: RETENTION_DAYS
+                  value: "14"
+              envFrom:
+                - secretRef:
+                    name: aws-credentials
+                    optional: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              volumeMounts:
+                - name: backup-scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backup-storage
+                  mountPath: /backups
+          volumes:
+            - name: backup-scripts
+              configMap:
+                name: redis-backup-script
+                defaultMode: 0755
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: backup-pvc
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: backup-verification
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: backup-verification
+    app.kubernetes.io/part-of: email-converter-backup
+    app.kubernetes.io/component: verification
+spec:
+  schedule: "0 6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: backup-verification
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: backup-verification
+            app.kubernetes.io/component: backup
+        spec:
+          serviceAccountName: backup-sa
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+          containers:
+            - name: verify-backup
+              image: postgres:16-alpine
+              command: ["/bin/sh", "/scripts/verify.sh"]
+              env:
+                - name: POSTGRES_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: POSTGRES_HOST
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: POSTGRES_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: POSTGRES_PASSWORD
+                - name: POSTGRES_DB
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: POSTGRES_DB
+                - name: REDIS_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: REDIS_HOST
+                - name: REDIS_PORT
+                  value: "6379"
+                - name: REDIS_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: REDIS_PASSWORD
+                - name: S3_BACKUP_BUCKET
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: S3_BACKUP_BUCKET
+                      optional: true
+                - name: AWS_REGION
+                  value: "us-east-1"
+                - name: PROMETHEUS_PUSHGATEWAY
+                  value: "prometheus-pushgateway:9091"
+              envFrom:
+                - secretRef:
+                    name: aws-credentials
+                    optional: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              volumeMounts:
+                - name: verify-scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backup-storage
+                  mountPath: /backups
+                  readOnly: true
+          volumes:
+            - name: verify-scripts
+              configMap:
+                name: verify-backup-script
+                defaultMode: 0755
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: backup-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: backup-storage
+    app.kubernetes.io/part-of: email-converter-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: gp3
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-sa
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: backup-sa
+    app.kubernetes.io/part-of: email-converter-backup
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: backup-role
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: backup-role
+rules:
+  - apiGroups: [""]
+    resources: ["secrets", "configmaps"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "create", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backup-rolebinding
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: backup-rolebinding
+subjects:
+  - kind: ServiceAccount
+    name: backup-sa
+    namespace: email-converter
+roleRef:
+  kind: Role
+  name: backup-role
+  apiGroup: rbac.authorization.k8s.io

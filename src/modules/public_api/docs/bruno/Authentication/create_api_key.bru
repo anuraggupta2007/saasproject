@@ -1,0 +1,25 @@
+meta {
+  name: Create API Key
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{base_url}}/api/public/v1/auth/keys
+  body:json {
+    {
+      "name": "my-api-key",
+      "scopes": ["read", "write"]
+    }
+  }
+  auth: none
+}
+
+script {
+  req.header("Authorization", "Bearer {{api_key}}")
+  req.header("Content-Type", "application/json")
+}
+
+assert {
+  res.status: eq 201
+}

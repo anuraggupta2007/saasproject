@@ -1,0 +1,248 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: disaster-recovery-config
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: disaster-recovery
+    app.kubernetes.io/part-of: email-converter-dr
+data:
+  dr-status.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    echo "=========================================="
+    echo "Disaster Recovery Status"
+    echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "=========================================="
+
+    # Database Status
+    echo ""
+    echo "--- Database Status ---"
+    if pg_isready -h "${POSTGRES_HOST}" -p 5432 -U "${POSTGRES_USER}" > /dev/null 2>&1; then
+      echo "  PostgreSQL: CONNECTED"
+      DB_SIZE=$(psql -h "${POSTGRES_HOST}" -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -t -c "SELECT pg_size_pretty(pg_database_size('${POSTGRES_DB}'));" 2>/dev/null | tr -d ' ')
+      echo "  Database size: ${DB_SIZE:-unknown}"
+    else
+      echo "  PostgreSQL: DISCONNECTED"
+    fi
+
+    # Redis Status
+    echo ""
+    echo "--- Redis Status ---"
+    REDIS_PING=$(redis-cli -h "${REDIS_HOST}" -p "${REDIS_PORT:-6379}" ${REDIS_PASSWORD:+-a "${REDIS_PASSWORD}"} --no-auth-warning PING 2>/dev/null || echo "FAILED")
+    if [ "$REDIS_PING" = "PONG" ]; then
+      echo "  Redis: CONNECTED"
+    else
+      echo "  Redis: DISCONNECTED"
+    fi
+
+    # Backup Status
+    echo ""
+    echo "--- Backup Status ---"
+    LATEST_PG=$(find /backups/postgres/full -name "*_full.sql.gz" -type f 2>/dev/null | sort -r | head -1)
+    if [ -n "$LATEST_PG" ]; then
+      PG_AGE=$(( ($(date +%s) - $(stat -c%Y "$LATEST_PG" 2>/dev/null || stat -f%m "$LATEST_PG" 2>/dev/null || echo "0")) / 3600 ))
+      echo "  PostgreSQL: $(basename "$LATEST_PG") (${PG_AGE}h ago)"
+    else
+      echo "  PostgreSQL: NO BACKUPS FOUND"
+    fi
+
+    LATEST_RDB=$(find /backups/redis/rdb -name "*.rdb.gz" -type f 2>/dev/null | sort -r | head -1)
+    if [ -n "$LATEST_RDB" ]; then
+      RDB_AGE=$(( ($(date +%s) - $(stat -c%Y "$LATEST_RDB" 2>/dev/null || stat -f%m "$LATEST_RDB" 2>/dev/null || echo "0")) / 3600 ))
+      echo "  Redis: $(basename "$LATEST_RDB") (${RDB_AGE}h ago)"
+    else
+      echo "  Redis: NO BACKUPS FOUND"
+    fi
+
+    # Kubernetes Status
+    echo ""
+    echo "--- Kubernetes Status ---"
+    READY=$(kubectl get pods -n email-converter --field-selector=status.phase=Running -o name 2>/dev/null | wc -l)
+    TOTAL=$(kubectl get pods -n email-converter -o name 2>/dev/null | wc -l)
+    echo "  Pods: ${READY}/${TOTAL} Running"
+
+    echo ""
+    echo "--- RPO/RTO ---"
+    if [ -n "$LATEST_PG" ]; then
+      RPO_MINUTES=$(( ($(date +%s) - $(stat -c%Y "$LATEST_PG" 2>/dev/null || stat -f%m "$LATEST_PG" 2>/dev/null || echo "0")) / 60 ))
+      if [ "$RPO_MINUTES" -le 15 ]; then
+        echo "  RPO (<15min): MET (${RPO_MINUTES}min)"
+      else
+        echo "  RPO (<15min): NOT MET (${RPO_MINUTES}min)"
+      fi
+    fi
+    echo "  RTO (<1hr): Manual verification required"
+    echo "=========================================="
+  dr-failover.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    echo "=========================================="
+    echo "DISASTER RECOVERY FAILOVER"
+    echo "=========================================="
+    echo ""
+    echo "This will perform regional failover."
+    echo ""
+    read -p "Are you sure? (yes/no): " CONFIRM
+    if [ "$CONFIRM" != "yes" ]; then
+      echo "Cancelled"
+      exit 0
+    fi
+
+    # 1. Verify backups in secondary region
+    echo "Step 1: Verifying secondary region backups..."
+    if [ -n "${DR_SECONDARY_REGION:-}" ] && [ -n "${S3_BACKUP_BUCKET:-}" ]; then
+      aws s3 ls "s3://${S3_BACKUP_BUCKET}-dr/" --region "$DR_SECONDARY_REGION" > /dev/null 2>&1 && \
+        echo "  Secondary region S3: ACCESSIBLE" || \
+        echo "  WARNING: Secondary region S3 not accessible"
+    fi
+
+    # 2. Promote RDS replica
+    echo "Step 2: RDS replica promotion..."
+    echo "  Run manually: aws rds promote-read-replica --db-instance-identifier <id> --region ${DR_SECONDARY_REGION:-us-west-2}"
+
+    # 3. DNS failover
+    echo "Step 3: DNS failover..."
+    echo "  Route53 health checks should auto-failover"
+    echo "  Manual: aws route53 change-resource-record-sets --hosted-zone-id <zone> --change-batch file://failover.json"
+
+    # 4. Activate services
+    echo "Step 4: Activating services in secondary region..."
+    if command -v helm &>/dev/null; then
+      helm upgrade --install email-converter /app/k8s/helm/email-converter \
+        --namespace email-converter \
+        --set "global.region=${DR_SECONDARY_REGION:-us-west-2}" \
+        --wait --timeout 30m
+    fi
+
+    echo "=========================================="
+    echo "Failover initiated. Monitor services."
+    echo "=========================================="
+  dr-ransomware.sh: |
+    #!/bin/bash
+    set -euo pipefail
+
+    echo "=========================================="
+    echo "RANSOMWARE RESPONSE"
+    echo "=========================================="
+    echo ""
+    echo "Phase 1: Containment (0-15 min)"
+    echo "  1. Isolate affected systems"
+    echo "  2. Disable compromised accounts"
+    echo "  3. Block suspicious IPs"
+    echo "  4. Preserve forensic evidence"
+    echo ""
+    echo "Phase 2: Assessment (15-60 min)"
+    echo "  1. Identify scope of encryption"
+    echo "  2. Determine entry point"
+    echo "  3. Check for data exfiltration"
+    echo "  4. Identify affected backups"
+    echo ""
+    echo "Phase 3: Recovery (1-4 hours)"
+    echo "  1. Restore from clean backups"
+    echo "  2. Rotate all credentials"
+    echo "  3. Patch vulnerabilities"
+    echo "  4. Rebuild affected systems"
+    echo ""
+    echo "Phase 4: Validation (4-8 hours)"
+    echo "  1. Verify data integrity"
+    echo "  2. Test all services"
+    echo "  3. Monitor for reinfection"
+    echo "  4. Update security policies"
+    echo ""
+    read -p "Execute recovery? (yes/no): " CONFIRM
+    if [ "$CONFIRM" = "yes" ]; then
+      LATEST=$(find /backups/postgres/full -name "*_full.sql.gz" -type f 2>/dev/null | sort -r | head -2 | tail -1)
+      if [ -n "$LATEST" ]; then
+        echo "Using backup: $(basename $LATEST)"
+        read -p "Confirm backup is clean (yes/no): " CLEAN
+        if [ "$CLEAN" = "yes" ]; then
+          /scripts/disaster-recovery.sh recover-db full
+        fi
+      fi
+    fi
+    echo "=========================================="
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dr-status-check
+  namespace: email-converter
+  labels:
+    app.kubernetes.io/name: dr-status
+    app.kubernetes.io/part-of: email-converter-dr
+spec:
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          serviceAccountName: backup-sa
+          restartPolicy: OnFailure
+          containers:
+            - name: dr-status
+              image: postgres:16-alpine
+              command: ["/bin/sh", "/scripts/dr-status.sh"]
+              env:
+                - name: POSTGRES_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: POSTGRES_HOST
+                - name: POSTGRES_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: POSTGRES_USER
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: POSTGRES_PASSWORD
+                - name: POSTGRES_DB
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: POSTGRES_DB
+                - name: REDIS_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: email-converter-config
+                      key: REDIS_HOST
+                - name: REDIS_PORT
+                  value: "6379"
+                - name: REDIS_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: email-converter-secrets
+                      key: REDIS_PASSWORD
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 100m
+                  memory: 128Mi
+              volumeMounts:
+                - name: dr-scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backup-storage
+                  mountPath: /backups
+                  readOnly: true
+          volumes:
+            - name: dr-scripts
+              configMap:
+                name: disaster-recovery-config
+                defaultMode: 0755
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: backup-pvc
+                readOnly: true

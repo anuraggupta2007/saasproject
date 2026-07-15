@@ -1,0 +1,25 @@
+meta {
+  name: Create Upload
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{base_url}}/api/public/v1/uploads
+  body:json {
+    {
+      "filename": "test.mbox",
+      "file_size": 1048576
+    }
+  }
+  auth: none
+}
+
+script {
+  req.header("Authorization", "Bearer {{api_key}}")
+  req.header("Content-Type", "application/json")
+}
+
+assert {
+  res.status: eq 201
+}

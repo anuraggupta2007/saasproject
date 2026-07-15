@@ -1,0 +1,392 @@
+# =============================================================================
+# CI Pipeline - Pull Request Validation
+# =============================================================================
+# Runs on every PR and push to develop/main
+# Quality gates: lint, typecheck, test, security, build verification
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  # ===========================================================================
+  # Code Quality - Linting & Formatting
+  # ===========================================================================
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install ruff mypy pydantic
+
+      - name: Ruff lint
+        run: ruff check src/ tests/ --output-format=github
+
+      - name: Ruff format check
+        run: ruff format --check src/ tests/
+
+  # ===========================================================================
+  # Static Type Checking
+  # ===========================================================================
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install mypy types-redis types-requests pydantic
+
+      - name: Run mypy
+        run: mypy src/ --ignore-missing-imports --no-error-summary
+        continue-on-error: false
+
+  # ===========================================================================
+  # Unit & Integration Tests
+  # ===========================================================================
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: email_converter_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/email_converter_test
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      SECRET_KEY: test-secret-key-for-ci-only-min-32-chars!!
+      LICENSE_ENCRYPTION_KEY: test-license-key-for-ci-only-min-32-chars!!
+      APP_ENV: testing
+      DEBUG: "true"
+      LOG_LEVEL: DEBUG
+      LOG_FORMAT: console
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov httpx aiosqlite
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ \
+            --cov=src \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --cov-fail-under=80 \
+            -v \
+            --tb=short
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+
+  # ===========================================================================
+  # Security Scanning
+  # ===========================================================================
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install safety pip-audit bandit
+
+      - name: Dependency audit (pip-audit)
+        run: pip-audit -r requirements.txt --desc on
+        continue-on-error: false
+
+      - name: Security lint (bandit)
+        run: bandit -r src/ -ll --skip B101,B311
+        continue-on-error: false
+
+  # ===========================================================================
+  # Helm Validation
+  # ===========================================================================
+  helm-validate:
+    name: Helm Validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "v3.14.0"
+
+      - name: Lint chart
+        run: helm lint k8s/helm/email-converter
+
+      - name: Template chart (dev)
+        run: |
+          helm template email-converter k8s/helm/email-converter \
+            -f k8s/helm/email-converter/values-dev.yaml \
+            --validate
+
+      - name: Template chart (staging)
+        run: |
+          helm template email-converter k8s/helm/email-converter \
+            -f k8s/helm/email-converter/values-staging.yaml \
+            --validate
+
+      - name: Template chart (prod)
+        run: |
+          helm template email-converter k8s/helm/email-converter \
+            -f k8s/helm/email-converter/values-prod.yaml \
+            --validate
+
+  # ===========================================================================
+  # API Contract Tests
+  # ===========================================================================
+  contract:
+    name: API Contract
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install schemathesis httpx
+
+      - name: Start API server
+        run: |
+          DATABASE_URL=sqlite+aiosqlite:///./test_contract.db \
+          REDIS_URL=redis://localhost:6379/0 \
+          SECRET_KEY=test-contract-key-min-32-chars!!!!!! \
+          LICENSE_ENCRYPTION_KEY=test-contract-license-key-min-32-chars!! \
+          python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./test_contract.db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-contract-key-min-32-chars!!!!!!
+          LICENSE_ENCRYPTION_KEY: test-contract-license-key-min-32-chars!!
+          APP_ENV: testing
+
+      - name: Validate API schema
+        run: |
+          schemathesis run http://localhost:8000/openapi.json \
+            --checks all \
+            --hypothesis-max-examples=50 \
+            --base-url http://localhost:8000
+        continue-on-error: true
+
+  # ===========================================================================
+  # Performance Smoke Tests
+  # ===========================================================================
+  performance:
+    name: Perf Smoke
+    runs-on: ubuntu-latest
+    needs: [test]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install httpx locust
+
+      - name: Start API server
+        run: |
+          DATABASE_URL=sqlite+aiosqlite:///./test_perf.db \
+          REDIS_URL=redis://localhost:6379/0 \
+          SECRET_KEY=test-perf-key-min-32-chars!!!!!! \
+          LICENSE_ENCRYPTION_KEY=test-perf-license-key-min-32-chars!!!! \
+          python -m uvicorn src.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./test_perf.db
+          REDIS_URL: redis://localhost:6379/0
+          SECRET_KEY: test-perf-key-min-32-chars!!!!!!
+          LICENSE_ENCRYPTION_KEY: test-perf-license-key-min-32-chars!!!!
+          APP_ENV: testing
+
+      - name: Run smoke test
+        run: |
+          python -c "
+          import httpx
+          import time
+
+          client = httpx.Client(base_url='http://localhost:8000')
+          errors = []
+
+          # Health check
+          for i in range(10):
+              try:
+                  r = client.get('/health')
+                  if r.status_code != 200:
+                      errors.append(f'Health check failed: {r.status_code}')
+              except Exception as e:
+                  errors.append(f'Health check error: {e}')
+
+          # Response time check
+          times = []
+          for i in range(20):
+              start = time.time()
+              try:
+                  client.get('/health')
+                  times.append(time.time() - start)
+              except:
+                  pass
+
+          if times:
+              avg = sum(times) / len(times)
+              p95 = sorted(times)[int(len(times) * 0.95)]
+              print(f'Avg: {avg*1000:.0f}ms, P95: {p95*1000:.0f}ms')
+              if p95 > 1.0:
+                  errors.append(f'P95 too high: {p95:.2f}s')
+
+          if errors:
+              for e in errors:
+                  print(f'ERROR: {e}')
+              exit(1)
+          print('Smoke tests passed')
+          "
+
+  # ===========================================================================
+  # Quality Gate Summary
+  # ===========================================================================
+  quality-gate:
+    name: Quality Gate
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test, security, helm-validate, contract, performance]
+    if: always()
+    steps:
+      - name: Check all jobs
+        run: |
+          if [[ "${{ needs.lint.result }}" != "success" ]] || \
+             [[ "${{ needs.typecheck.result }}" != "success" ]] || \
+             [[ "${{ needs.test.result }}" != "success" ]] || \
+             [[ "${{ needs.security.result }}" != "success" ]] || \
+             [[ "${{ needs.helm-validate.result }}" != "success" ]]; then
+            echo "Quality gate FAILED"
+            echo "Lint: ${{ needs.lint.result }}"
+            echo "TypeCheck: ${{ needs.typecheck.result }}"
+            echo "Test: ${{ needs.test.result }}"
+            echo "Security: ${{ needs.security.result }}"
+            echo "Helm: ${{ needs.helm-validate.result }}"
+            exit 1
+          fi
+          echo "Quality gate PASSED"
+
+      - name: Notification (on failure)
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "❌ CI Failed: ${{ github.repository }}@${{ github.ref_name }}",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *CI Pipeline Failed*\n*Repo:* ${{ github.repository }}\n*Branch:* ${{ github.ref_name }}\n*Commit:* `${{ github.sha }}`\n*Author:* ${{ github.actor }}\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

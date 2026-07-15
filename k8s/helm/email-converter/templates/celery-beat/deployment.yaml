@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "email-converter.fullname" . }}-celery-beat
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-beat
+spec:
+  replicas: {{ .Values.celeryBeat.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "email-converter.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-beat
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        {{- include "email-converter.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: celery-beat
+    spec:
+      serviceAccountName: {{ include "email-converter.fullname" . }}-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: celery-beat
+          image: {{ include "email-converter.beatImage" . }}
+          imagePullPolicy: {{ .Values.celeryBeat.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - src.core.celery_app:celery_app
+            - beat
+            - --loglevel=info
+            - --schedule=/app/tmp/celerybeat-schedule
+          envFrom:
+            - configMapRef:
+                name: {{ include "email-converter.fullname" . }}-config
+            - secretRef:
+                name: {{ include "email-converter.fullname" . }}-secrets
+          resources:
+            {{- toYaml .Values.celeryBeat.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - |
+                  import redis
+                  import os
+                  r = redis.Redis.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379/0'))
+                  r.ping()
+            initialDelaySeconds: {{ .Values.celeryBeat.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.celeryBeat.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.celeryBeat.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.celeryBeat.livenessProbe.failureThreshold }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}

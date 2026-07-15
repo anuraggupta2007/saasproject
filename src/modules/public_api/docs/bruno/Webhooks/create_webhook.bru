@@ -1,0 +1,25 @@
+meta {
+  name: Create Webhook
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{base_url}}/api/public/v1/webhooks
+  body:json {
+    {
+      "url": "https://your-server.com/webhook",
+      "events": ["conversion.completed", "conversion.failed"]
+    }
+  }
+  auth: none
+}
+
+script {
+  req.header("Authorization", "Bearer {{api_key}}")
+  req.header("Content-Type", "application/json")
+}
+
+assert {
+  res.status: eq 201
+}

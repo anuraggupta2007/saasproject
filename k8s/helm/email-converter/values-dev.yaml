@@ -1,0 +1,208 @@
+# =============================================================================
+# Helm Values - Development
+# =============================================================================
+
+global:
+  imageRegistry: ghcr.io
+  imageRepository: email-converter
+  environment: development
+  storageClass: standard
+
+api:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+celeryWorker:
+  replicaCount: 1
+  autoscaling:
+    enabled: false
+  pdb:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+celeryBeat:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+flower:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+postgresql:
+  enabled: true
+  auth:
+    username: postgres
+    password: postgres
+    database: email_converter
+    postgresPassword: postgres
+  primary:
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: standard
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+
+redis:
+  enabled: true
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
+      storageClass: standard
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 250m
+        memory: 256Mi
+
+minio:
+  enabled: true
+  auth:
+    rootUser: minioadmin
+    rootPassword: minioadmin
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: standard
+  defaultBuckets:
+    - name: email-converter-uploads
+
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+  tls: []
+  hosts:
+    - host: localhost
+      paths:
+        - path: /
+          pathType: Prefix
+          serviceName: api
+          servicePort: 8000
+
+certificates:
+  enabled: false
+
+networkPolicies:
+  enabled: false
+
+prometheus:
+  enabled: true
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+grafana:
+  enabled: true
+  adminPassword: admin
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+loki:
+  enabled: true
+  persistence:
+    enabled: false
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+otelCollector:
+  enabled: true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 128Mi
+
+cronjobs:
+  backup:
+    enabled: false
+
+secrets:
+  secretKey: dev-secret-key-change-in-production-min-32-chars
+  smtpHost: smtp.gmail.com
+  smtpPort: 587
+  smtpFrom: noreply@emailconverter.com
+  googleClientId: ""
+  googleClientSecret: ""
+  microsoftClientId: ""
+  microsoftClientSecret: ""
+  stripeSecretKey: ""
+  stripePublishableKey: ""
+  stripeWebhookSecret: ""
+  razorpayKeyId: ""
+  razorpayKeySecret: ""
+  razorpayWebhookSecret: ""
+  sendgridApiKey: ""
+  sendgridFromEmail: ""
+  twilioAccountSid: ""
+  twilioAuthToken: ""
+  twilioPhoneNumber: ""
+  sentryDsn: ""
+  licenseEncryptionKey: "dev-license-key-change-in-prod-32-chars!!"
+  storageAccessKey: minioadmin
+  storageSecretKey: minioadmin
+  grafanaAdminPassword: admin
+  minioRootPassword: minioadmin
+  redisPassword: ""
+  postgresPassword: postgres
+  postgresUser: postgres
+  postgresDatabase: email_converter

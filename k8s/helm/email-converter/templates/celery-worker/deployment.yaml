@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "email-converter.fullname" . }}-celery-worker
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: celery-worker
+spec:
+  replicas: {{ .Values.celeryWorker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "email-converter.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: celery-worker
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        {{- include "email-converter.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: celery-worker
+    spec:
+      serviceAccountName: {{ include "email-converter.fullname" . }}-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: celery-worker
+          image: {{ include "email-converter.workerImage" . }}
+          imagePullPolicy: {{ .Values.celeryWorker.image.pullPolicy }}
+          command:
+            - celery
+            - -A
+            - src.core.celery_app:celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency=4
+            - --max-tasks-per-child=1000
+            - --prefetch-multiplier=1
+            - -Q
+            - {{ .Values.celeryWorker.queues }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "email-converter.fullname" . }}-config
+            - secretRef:
+                name: {{ include "email-converter.fullname" . }}-secrets
+          resources:
+            {{- toYaml .Values.celeryWorker.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - |
+                  import redis
+                  import os
+                  r = redis.Redis.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379/1'))
+                  r.ping()
+            initialDelaySeconds: {{ .Values.celeryWorker.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.celeryWorker.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.celeryWorker.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.celeryWorker.livenessProbe.failureThreshold }}
+          readinessProbe:
+            exec:
+              command:
+                - python
+                - -c
+                - |
+                  import redis
+                  import os
+                  r = redis.Redis.from_url(os.environ.get('REDIS_URL', 'redis://localhost:6379/1'))
+                  r.ping()
+            initialDelaySeconds: {{ .Values.celeryWorker.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.celeryWorker.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.celeryWorker.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.celeryWorker.readinessProbe.failureThreshold }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: uploads
+              mountPath: /app/uploads
+            - name: logs
+              mountPath: /app/logs
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: uploads
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+      {{- with .Values.celeryWorker.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celeryWorker.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.celeryWorker.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

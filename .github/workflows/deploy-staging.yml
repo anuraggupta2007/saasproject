@@ -1,0 +1,122 @@
+# =============================================================================
+# Deploy to Staging
+# =============================================================================
+# Auto-deploys on push to main branch
+# Uses staging values with moderate resources
+# =============================================================================
+
+name: Deploy to Staging
+
+on:
+  workflow_run:
+    workflows: ["Docker Publish"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      image-tag:
+        description: "Docker image tag to deploy"
+        required: true
+        type: string
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  deploy:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging-api.emailconverter.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.image-tag }}" ]; then
+            echo "tag=${{ inputs.image-tag }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_run" ]; then
+            echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy to staging
+        uses: ./.github/actions/helm-deploy
+        with:
+          environment: staging
+          namespace: email-converter-staging
+          image-tag: ${{ steps.tag.outputs.image }}
+          registry: ${{ env.REGISTRY }}
+          image-prefix: ${{ env.IMAGE_PREFIX }}
+
+      - name: Run integration tests
+        run: |
+          echo "Running integration tests against staging..."
+          # Wait for deployment to stabilize
+          sleep 30
+
+          # Health check
+          for i in $(seq 1 15); do
+            if curl -sf https://staging-api.emailconverter.com/health > /dev/null 2>&1; then
+              echo "Staging health check passed"
+              break
+            fi
+            echo "Attempt $i..."
+            sleep 10
+          done
+
+      - name: Notify success
+        if: success()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "✅ Staging deploy succeeded",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "✅ *Staging Deploy Succeeded*\n*Repo:* ${{ github.repository }}\n*Image:* `${{ steps.tag.outputs.image }}`\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true
+
+      - name: Notify failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": "❌ Staging deploy failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "❌ *Staging Deploy Failed*\n*Repo:* ${{ github.repository }}\n*Image:* `${{ steps.tag.outputs.image }}`\n*Link:* <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

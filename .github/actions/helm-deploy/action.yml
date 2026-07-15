@@ -1,0 +1,155 @@
+# =============================================================================
+# Reusable Helm Deploy Action
+# =============================================================================
+# Reusable composite action for deploying to any environment
+# Used by deploy-dev, deploy-staging, deploy-prod workflows
+# =============================================================================
+
+name: "Helm Deploy"
+description: "Deploy Email Converter to Kubernetes"
+
+inputs:
+  environment:
+    description: "Target environment (dev, staging, prod)"
+    required: true
+  namespace:
+    description: "Kubernetes namespace"
+    required: true
+  image-tag:
+    description: "Docker image tag to deploy"
+    required: true
+  registry:
+    description: "Container registry URL"
+    required: false
+    default: "ghcr.io"
+  image-prefix:
+    description: "Image repository prefix"
+    required: false
+    default: "email-converter/saas"
+  helm-extra-args:
+    description: "Extra arguments to pass to helm upgrade"
+    required: false
+    default: ""
+  timeout:
+    description: "Helm upgrade timeout"
+    required: false
+    default: "10m"
+  wait:
+    description: "Wait for deployment to complete"
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Determine Helm values file
+      id: values
+      shell: bash
+      run: |
+        case "${{ inputs.environment }}" in
+          dev)
+            echo "file=k8s/helm/email-converter/values-dev.yaml" >> $GITHUB_OUTPUT
+            ;;
+          staging)
+            echo "file=k8s/helm/email-converter/values-staging.yaml" >> $GITHUB_OUTPUT
+            ;;
+          prod)
+            echo "file=k8s/helm/email-converter/values-prod.yaml" >> $GITHUB_OUTPUT
+            ;;
+          *)
+            echo "Unknown environment: ${{ inputs.environment }}"
+            exit 1
+            ;;
+        esac
+
+    - name: Setup Helm
+      uses: azure/setup-helm@v4
+      with:
+        version: "v3.14.0"
+
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v4
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+    - name: Helm dependency update
+      shell: bash
+      run: |
+        helm dependency update k8s/helm/email-converter || true
+
+    - name: Helm lint
+      shell: bash
+      run: |
+        helm lint k8s/helm/email-converter \
+          -f ${{ steps.values.outputs.file }}
+
+    - name: Helm template (dry-run)
+      shell: bash
+      run: |
+        helm template email-converter k8s/helm/email-converter \
+          -f ${{ steps.values.outputs.file }} \
+          --namespace ${{ inputs.namespace }} \
+          --set "api.image.tag=${{ inputs.image-tag }}" \
+          --set "celeryWorker.image.tag=${{ inputs.image-tag }}" \
+          --set "celeryBeat.image.tag=${{ inputs.image-tag }}" \
+          --set "flower.image.tag=${{ inputs.image-tag }}" \
+          --set "global.imageRegistry=${{ inputs.registry }}" \
+          --set "global.imageRepository=${{ inputs.image-prefix }}" \
+          ${{ inputs.helm-extra-args }} \
+          --validate > /dev/null
+
+    - name: Deploy with Helm
+      shell: bash
+      run: |
+        helm upgrade --install email-converter k8s/helm/email-converter \
+          -f ${{ steps.values.outputs.file }} \
+          --namespace ${{ inputs.namespace }} \
+          --create-namespace \
+          --set "api.image.tag=${{ inputs.image-tag }}" \
+          --set "celeryWorker.image.tag=${{ inputs.image-tag }}" \
+          --set "celeryBeat.image.tag=${{ inputs.image-tag }}" \
+          --set "flower.image.tag=${{ inputs.image-tag }}" \
+          --set "global.imageRegistry=${{ inputs.registry }}" \
+          --set "global.imageRepository=${{ inputs.image-prefix }}" \
+          --set "global.environment=${{ inputs.environment }}" \
+          ${{ inputs.helm-extra-args }} \
+          --wait=${{ inputs.wait }} \
+          --timeout ${{ inputs.timeout }} \
+          --atomic
+
+    - name: Verify deployment
+      shell: bash
+      run: |
+        echo "Verifying deployment in ${{ inputs.namespace }}..."
+        kubectl get pods -n ${{ inputs.namespace }}
+        echo ""
+        echo "Checking pod readiness..."
+        kubectl wait --for=condition=ready pod \
+          -l app.kubernetes.io/part-of=email-converter \
+          -n ${{ inputs.namespace }} \
+          --timeout=300s
+
+    - name: Run smoke tests
+      shell: bash
+      run: |
+        echo "Running smoke tests..."
+        # Get API service endpoint
+        API_SERVICE=$(kubectl get svc api -n ${{ inputs.namespace }} -o jsonpath='{.metadata.name}')
+        echo "API Service: $API_SERVICE"
+
+        # Port forward and test
+        kubectl port-forward svc/api 8080:8000 -n ${{ inputs.namespace }} &
+        sleep 5
+
+        # Health check
+        for i in $(seq 1 10); do
+          if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+            echo "Health check passed on attempt $i"
+            exit 0
+          fi
+          echo "Attempt $i failed, retrying..."
+          sleep 3
+        done
+        echo "Health check failed after 10 attempts"
+        exit 1

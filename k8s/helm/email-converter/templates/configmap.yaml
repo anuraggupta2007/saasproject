@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "email-converter.fullname" . }}-config
+  namespace: {{ include "email-converter.namespace" . }}
+  labels:
+    {{- include "email-converter.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+data:
+  # Application
+  APP_NAME: "Email Converter SaaS"
+  APP_VERSION: {{ .Chart.AppVersion | quote }}
+  APP_ENV: {{ .Values.global.environment | quote }}
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  WORKERS: {{ .Values.api.env.WORKERS | quote }}
+  LOG_LEVEL: {{ .Values.api.env.LOG_LEVEL | quote }}
+  LOG_FORMAT: {{ .Values.api.env.LOG_FORMAT | quote }}
+
+  # CORS
+  CORS_ORIGINS: '["https://emailconverter.com","https://api.emailconverter.com"]'
+
+  # Cookie Settings
+  COOKIE_SECURE: "true"
+  COOKIE_HTTPONLY: "true"
+  COOKIE_SAMESITE: "strict"
+  COOKIE_DOMAIN: "emailconverter.com"
+
+  # Rate Limiting
+  RATE_LIMIT_AUTH_ATTEMPTS: "5"
+  RATE_LIMIT_AUTH_WINDOW_SECONDS: "300"
+  RATE_LIMIT_PER_MINUTE: "60"
+  RATE_LIMIT_PER_ENDPOINT: "30"
+  DAILY_API_QUOTA: "10000"
+
+  # Upload
+  MAX_UPLOAD_SIZE_MB: "10240"
+  CHUNK_SIZE_MB: "8"
+
+  # Security
+  MAX_LOGIN_ATTEMPTS: "5"
+  LOCKOUT_DURATION_MINUTES: "30"
+  PASSWORD_EXPIRY_DAYS: "90"
+  PASSWORD_HISTORY_SIZE: "5"
+  MFA_LOCKOUT_ATTEMPTS: "5"
+  MFA_LOCKOUT_MINUTES: "15"
+
+  # Email
+  EMAIL_VERIFICATION_EXPIRE_HOURS: "24"
+  PASSWORD_RESET_EXPIRE_HOURS: "1"
+  FRONTEND_URL: "https://emailconverter.com"
+
+  # License
+  LICENSE_TOKEN_EXPIRY_HOURS: "24"
+  LICENSE_OFFLINE_TOKEN_EXPIRY_HOURS: "72"
+
+  # Monitoring
+  HEALTH_CHECK_INTERVAL_SECONDS: "60"
+  ALERT_EVALUATION_INTERVAL_SECONDS: "300"
+  METRICS_COLLECTION_INTERVAL_SECONDS: "60"
+  OTEL_SERVICE_NAME: "email-converter"
+
+  # Search
+  SEARCH_INDEX_NAME: "email_converter"
+  SEARCH_CACHE_TTL: "300"
+  SEARCH_MAX_RESULTS: "10000"
+
+  # Celery Queues
+  CELERY_QUEUES: {{ .Values.celeryWorker.queues | quote }}
