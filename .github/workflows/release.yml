@@ -129,7 +129,7 @@ jobs:
     needs: [release]
     steps:
       - name: Notify Slack
-        uses: slackapi/slack-github-action@v1
+        uses: slackapi/slack-github-action@v3
         with:
           payload: |
             {
