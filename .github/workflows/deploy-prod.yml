@@ -62,7 +62,7 @@ jobs:
       previous-tag: ${{ steps.previous.outputs.tag }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 2
 
@@ -97,7 +97,7 @@ jobs:
       url: https://api.emailconverter.com
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Deploy with selected strategy
         uses: ./.github/actions/helm-deploy
@@ -177,7 +177,7 @@ jobs:
     if: failure()
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Rollback deployment
         run: |
